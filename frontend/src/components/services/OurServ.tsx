@@ -9,8 +9,7 @@ function OurServ() {
   const services = [
     { icon: haircutIcon, label: "Hair Cut" },
     { icon: shavingIcon, label: "Shaving" },
-    { icon: beardIcon, label: "Beard Trim" },
-    { icon: tattoo, label: "Tattoos" },
+   
   ];
 
   return (
