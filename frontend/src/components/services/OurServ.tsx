@@ -11,7 +11,7 @@ function OurServ() {
     { icon: shavingIcon, label: "Shaving" },
     { icon: beardIcon, label: "Beard Trim" },
     { icon: tattoo, label: "Tattoos" },
-    { icon: tattoo, label: "Tattoos" },
+    
   ];
 
   return (
