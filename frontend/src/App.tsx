@@ -23,6 +23,7 @@ import axios from "axios";
 import useUserData from "./hooks/useUserData";
 import 'aos/dist/aos.css';
 import AOS from "aos"; // <-- Import AOS
+import AboutUsPage from "./pages/AboutUsPage";
 
 type ProtectedRouteProps = {
   children: ReactNode;
@@ -107,7 +108,9 @@ export function App() {
           />
           <Route path="services" element={<ServicesPage />} />
           <Route path="blog" element={<BlogPage />} />
+          <Route path="aboutus" element={<AboutUsPage />} />
           <Route path="gallery" element={<GalleryPage />} />
+
           <Route path="*" element={<NotFoundPage />} />
 
           <Route
