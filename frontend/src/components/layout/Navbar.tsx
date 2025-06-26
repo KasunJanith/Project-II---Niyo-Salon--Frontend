@@ -8,9 +8,10 @@ import useUserData from '../../hooks/useUserData';
 const navLinks = [
   { name: "Home", path: "/" },
   { name: "Services", path: "/services" },
-  { name: "Appointments", path: "/appointments" },
   { name: "Gallery", path: "/gallery" },
   { name: "Blog", path: "/blog" },
+  { name: "About Us", path: "/aboutus" },
+  { name: "Appointments", path: "/appointments" },
 ];
 
 // Simulate getting user info from localStorage (replace with your auth logic)
@@ -36,7 +37,7 @@ const Navbar = () => {
       {/* Subtle Top Accent */}
       <div className="h-px bg-gradient-to-r from-transparent via-[#F7BF24] to-transparent opacity-60"></div>
       
-      <div className="max-w-7xl mx-auto px-6 sm:px-8">
+      <div className=" mx-auto px-6 sm:px-8">
         <div className="flex items-center justify-between h-20">
           
           {/* Minimalist Logo */}

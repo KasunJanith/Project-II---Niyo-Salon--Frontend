@@ -2,6 +2,7 @@ import React from "react";
 import sevBg from "../assets/Services/Services.png";
 import barberImg from "../assets/Services/Hero.png";
 import OurServ from "../components/services/OurServ";
+import ServiceList from "../components/services/ServiceList";
 
 
 function ServicesPage() {
@@ -75,8 +76,11 @@ function ServicesPage() {
       {/* Our Services Section */}
       <OurServ/>
       
+      {/*Services List Section */}
+      <ServiceList/>
+      
     </>
   );
-}
+} 
 
 export default ServicesPage;
