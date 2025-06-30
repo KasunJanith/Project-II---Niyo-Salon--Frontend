@@ -43,14 +43,53 @@ const RegisterPage = () => {
     setNameError(val.trim().length < 2 ? "Name is too short" : "");
   };
   const validatePhone = (val: string) => {
-    setPhoneNumber(val);
-    setPhoneError(
-      !/^94\d{9}$/.test(val) ? "Format: 94XXXXXXXXX (11 digits)" : ""
-    );
+    // Remove all non-digit characters
+    let cleaned = val.replace(/\D/g, "");
+    // Ensure it starts with country code 94
+    if (cleaned.startsWith("94") && cleaned.length === 11) {
+      setPhoneNumber("+" + cleaned);
+      setPhoneError("");
+    } else {
+      setPhoneNumber(val.startsWith("+") ? val : "+" + cleaned);
+      setPhoneError("Format: +94XXXXXXXXX (11 digits, include country code)");
+    }
   };
   const validatePassword = (val: string) => {
     setPassword(val);
     setPasswordError(val.length < 6 ? "At least 6 characters" : "");
+  };
+
+  // OTP states
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+
+  // Send OTP handler
+  const handleSendOtp = async () => {
+    setOtpError("");
+    setOtpLoading(true);
+    try {
+      await axios.post("http://localhost:8080/api/auth/send-otp", { phoneNumber });
+      setOtpSent(true);
+    } catch (err: any) {
+      setOtpError("Failed to send OTP. Please check the phone number.");
+    }
+    setOtpLoading(false);
+  };
+
+  // Verify OTP handler
+  const handleVerifyOtp = async () => {
+    setOtpError("");
+    setOtpLoading(true);
+    try {
+      await axios.post("http://localhost:8080/api/auth/verify-otp", { phoneNumber, otp });
+      setOtpVerified(true);
+    } catch (err: any) {
+      setOtpError("Invalid OTP. Please try again.");
+    }
+    setOtpLoading(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,6 +102,10 @@ const RegisterPage = () => {
     }
     if (nameError || phoneError || passwordError) {
       setSubmitError("Please fix the errors above.");
+      return;
+    }
+    if (!otpVerified) {
+      setSubmitError("Please verify your phone number with OTP.");
       return;
     }
     setLoading(true);
@@ -152,7 +195,7 @@ const RegisterPage = () => {
                     />
                   </span>
                 </label>
-                <div className="relative">
+                <div className="relative flex gap-2 items-center">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <UserIcon size={18} className="text-yellow-400" />
                   </span>
@@ -171,14 +214,54 @@ const RegisterPage = () => {
                     placeholder="94XXXXXXXXX"
                     required
                     aria-invalid={!!phoneError}
+                    disabled={otpSent || otpVerified}
                   />
-                  {phoneError && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500 text-xs flex items-center gap-1">
-                      <AlertCircle size={16} /> {phoneError}
-                    </span>
+                  {!otpVerified && (
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={otpLoading || !!phoneError || !phoneNumber}
+                      className="ml-2 px-3 py-1 rounded bg-yellow-500 text-black font-semibold hover:bg-yellow-600 transition disabled:opacity-60"
+                    >
+                      {otpLoading ? "Sending..." : otpSent ? "Resend OTP" : "Send OTP"}
+                    </button>
+                  )}
+                  {otpVerified && (
+                    <span className="ml-2 text-green-400 font-semibold">Verified</span>
                   )}
                 </div>
+                {phoneError && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500 text-xs flex items-center gap-1">
+                    <AlertCircle size={16} /> {phoneError}
+                  </span>
+                )}
+                {otpError && (
+                  <span className="block text-red-400 text-xs mt-1">{otpError}</span>
+                )}
               </div>
+              {/* OTP Input */}
+              {otpSent && !otpVerified && (
+                <div>
+                  <label className="block text-sm font-medium text-yellow-300 mb-1">Enter OTP</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={otp}
+                      onChange={e => setOtp(e.target.value)}
+                      className="block w-full pl-3 pr-3 py-2 rounded-lg bg-[#151515] border border-[#FFC20A] text-yellow-100 placeholder-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                      placeholder="Enter OTP"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVerifyOtp}
+                      disabled={otpLoading || !otp}
+                      className="px-3 py-1 rounded bg-green-500 text-black font-semibold hover:bg-green-600 transition disabled:opacity-60"
+                    >
+                      {otpLoading ? "Verifying..." : "Verify OTP"}
+                    </button>
+                  </div>
+                </div>
+              )}
               {/* Password */}
               <div>
                 <label
