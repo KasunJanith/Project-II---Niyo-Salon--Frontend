@@ -69,6 +69,7 @@ const AdminStaff = () => {
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [selectedStaffMember, setSelectedStaffMember] = useState<Staff | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const itemsPerPage = 8;
 
   // Mock staff data
@@ -301,6 +302,51 @@ const AdminStaff = () => {
   const handleSetAvailability = (staff: Staff) => {
     setSelectedStaffMember(staff);
     setShowAvailabilityModal(true);
+  };
+
+  const handleAddStaff = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    const formData = new FormData(e.currentTarget);
+    const payload = {
+      name: formData.get('name') as string,
+      phoneNumber: formData.get('phoneNumber') as string,
+      password: formData.get('password') as string,
+      role: formData.get('role') as string
+    };
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/admin/add-staff', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const newStaff = await response.json();
+        console.log('Staff added successfully:', newStaff);
+        alert('Staff member added successfully!');
+        setShowAddModal(false);
+        // Reset form
+        (e.target as HTMLFormElement).reset();
+        // Optionally refresh the page or update the staff list
+        window.location.reload();
+      } else {
+        const error = await response.text();
+        console.error('Error adding staff:', error);
+        alert(`Error: ${error}`);
+      }
+    } catch (error) {
+      console.error('Network error:', error);
+      alert('Network error. Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getStatusBadgeColor = (status: string) => {
@@ -684,8 +730,8 @@ const AdminStaff = () => {
         {/* Add Staff Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-[#181818] border border-gray-700 rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-[#181818] border border-gray-700 rounded-xl p-6 w-full max-w-lg mx-4">
+              <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-white">Add New Staff Member</h2>
                 <button
                   onClick={() => setShowAddModal(false)}
@@ -694,80 +740,73 @@ const AdminStaff = () => {
                   <XIcon size={20} className="text-gray-400" />
                 </button>
               </div>
-              <form className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
-                    <input
-                      type="text"
-                      className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
-                      placeholder="Enter full name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
-                    <input
-                      type="email"
-                      className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
-                      placeholder="Enter email address"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Phone</label>
-                    <input
-                      type="tel"
-                      className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
-                      placeholder="Enter phone number"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Role</label>
-                    <select className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none">
-                      <option value="">Select role</option>
-                      <option value="Senior Hair Stylist">Senior Hair Stylist</option>
-                      <option value="Hair Stylist">Hair Stylist</option>
-                      <option value="Master Barber">Master Barber</option>
-                      <option value="Barber">Barber</option>
-                      <option value="Hair Colorist">Hair Colorist</option>
-                      <option value="Spa Specialist">Spa Specialist</option>
-                      <option value="Nail Technician">Nail Technician</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Department</label>
-                    <select className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none">
-                      <option value="">Select department</option>
-                      <option value="Hair Services">Hair Services</option>
-                      <option value="Barber Services">Barber Services</option>
-                      <option value="Spa Services">Spa Services</option>
-                      <option value="Nail Services">Nail Services</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Experience</label>
-                    <input
-                      type="text"
-                      className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
-                      placeholder="e.g., 3 years"
-                    />
-                  </div>
-                </div>
+              
+              <form className="space-y-4" onSubmit={handleAddStaff}>
+                {/* Full Name - Required */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Address</label>
-                  <textarea
-                    className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
-                    rows={3}
-                    placeholder="Enter address"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Specialties</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Full Name <span className="text-red-400">*</span>
+                  </label>
                   <input
                     type="text"
+                    name="name"
+                    required
                     className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
-                    placeholder="Enter specialties (comma separated)"
+                    placeholder="Enter staff member's full name"
                   />
                 </div>
+
+                {/* Phone Number - Required */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Phone Number <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    name="phoneNumber"
+                    required
+                    className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
+                    placeholder="Enter phone number (e.g., +1234567890)"
+                  />
+                </div>
+
+                {/* Password - Required */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Password <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    name="password"
+                    required
+                    className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
+                    placeholder="Create a secure password"
+                  />
+                </div>
+
+                {/* Role - Pre-filled as Staff */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Role
+                  </label>
+                  <input
+                    type="text"
+                    name="role"
+                    value="staff"
+                    readOnly
+                    className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-gray-400 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Role is automatically set to staff</p>
+                </div>
+
+                {/* Note about required fields */}
+                <div className="bg-[#232323] border border-[#F7BF24]/30 rounded-lg p-3">
+                  <p className="text-sm text-gray-400">
+                    <span className="text-red-400">*</span> Required fields. Role is automatically set to staff. Additional details can be added later through the staff profile.
+                  </p>
+                </div>
+
+                {/* Action Buttons */}
                 <div className="flex space-x-3 pt-4">
                   <button
                     type="button"
@@ -778,9 +817,10 @@ const AdminStaff = () => {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-[#F7BF24] hover:bg-yellow-400 text-black rounded-lg font-semibold transition-colors"
+                    disabled={isSubmitting}
+                    className="flex-1 px-4 py-2 bg-[#F7BF24] hover:bg-yellow-400 text-black rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Add Staff Member
+                    {isSubmitting ? 'Adding...' : 'Add Staff Member'}
                   </button>
                 </div>
               </form>
