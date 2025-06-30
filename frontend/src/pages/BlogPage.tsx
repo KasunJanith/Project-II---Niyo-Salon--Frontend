@@ -1,24 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { SearchIcon, TagIcon, CalendarIcon, ClockIcon, UserIcon, ArrowRightIcon } from 'lucide-react';
+import { SearchIcon, TagIcon, CalendarIcon, ClockIcon, ArrowRightIcon } from 'lucide-react';
 
 // Helper function to convert basic Markdown to HTML
-// IMPORTANT: For a production app, use a dedicated Markdown parsing library
-// like 'marked' or 'react-markdown' for robust and secure rendering.
 const convertMarkdownToHtml = (markdown: string) => {
     let html = markdown
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>') // H3
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')   // H2
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')     // H1
-        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>') // Bold
-        .replace(/\*(.*?)\*/gim, '<em>$1</em>')     // Italic
-        .replace(/^- (.*$)/gim, '<li>$1</li>');    // List items (basic)
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/^- (.*$)/gim, '<li>$1</li>');
 
-    // Wrap list items in ul if they exist
     if (html.includes('<li>')) {
         html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
     }
 
-    // Add paragraph tags for lines not already covered by other tags
     html = html.split('\n').map(line => {
         if (
             line.trim() === '' ||
@@ -27,7 +23,7 @@ const convertMarkdownToHtml = (markdown: string) => {
             line.startsWith('<li') ||
             line.startsWith('<p')
         ) {
-            return line; // Don't wrap if already HTML tag or empty
+            return line;
         }
         return `<p>${line}</p>`;
     }).join('');
@@ -67,16 +63,13 @@ const BlogPage = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [modalPost, setModalPost] = useState<BlogPost | null>(null);
 
-    // Blog categories - retained for UI, but AI posts will only fit 'AI Content' or 'All Posts'
     const categories = [
         { id: 'all', name: 'All Posts' },
-        { id: 'ai-content', name: 'AI Content' },
         { id: 'hair', name: 'Hair' },
         { id: 'tattoo', name: 'Tattoo' },
-        { id: 'grooming', name: 'Grooming' }
+        
     ];
 
-    // Generic fallbacks for AI-generated posts
     const genericImageUrl = "https://placehold.co/800x480/A78BFA/ffffff?text=AI Salon Tips";
     const genericAuthorImage = "https://placehold.co/100x100/5B21B6/ffffff?text=AI";
     const genericAuthorRole = "AI Content Creator";
@@ -88,31 +81,39 @@ const BlogPage = () => {
         setError(null);
 
         try {
-            // IMPORTANT: Replace 'http://localhost:8080' with the actual URL of your Spring Boot backend.
-            // Ensure your Spring Boot backend is running and the /api/blog/posts endpoint is accessible.
             const response = await fetch('http://localhost:8080/api/blog/posts');
-
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(`Backend Error: ${response.status} - ${errorText || 'Unknown error'}`);
             }
-
             const data = await response.json();
-            // Transform backend data to fit existing frontend structure
-            const transformedPosts: BlogPost[] = data.map((post: any) => ({
-                id: post.id,
-                title: post.title,
-                content: post.content,
-                excerpt: post.content ? post.content.substring(0, 150) + (post.content.length > 150 ? '...' : '') : '',
-                imageUrl: genericImageUrl,
-                author: post.author || 'AI Generated',
-                authorRole: genericAuthorRole,
-                authorImage: genericAuthorImage,
-                date: new Date(post.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-                category: genericCategoryName.toLowerCase().replace(/\s/g, '-'),
-                readTime: post.content ? estimateReadTime(post.content) : 'N/A',
-                featured: false
-            }));
+            // Assign category based on backend or infer from title/content
+            const transformedPosts: BlogPost[] = data.map((post: any) => {
+                let category = (post.category || "")
+                    .toLowerCase()
+                    .replace(/\s/g, '-');
+                if (!category || category === "ai-content") {
+                    const text = (post.title + " " + post.content).toLowerCase();
+                    if (text.includes("hair")) category = "hair";
+                    else if (text.includes("tattoo")) category = "tattoo";
+                    else if (text.includes("grooming")) category = "grooming";
+                    else category = "ai-content";
+                }
+                return {
+                    id: post.id,
+                    title: post.title,
+                    content: post.content,
+                    excerpt: post.content ? post.content.substring(0, 150) + (post.content.length > 150 ? '...' : '') : '',
+                    imageUrl: genericImageUrl,
+                    author: post.author || 'AI Generated',
+                    authorRole: genericAuthorRole,
+                    authorImage: genericAuthorImage,
+                    date: new Date(post.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+                    category,
+                    readTime: post.content ? estimateReadTime(post.content) : 'N/A',
+                    featured: false
+                };
+            });
             setBlogPosts(transformedPosts);
         } catch (err: any) {
             console.error("Error fetching blog posts:", err);
@@ -122,12 +123,8 @@ const BlogPage = () => {
         }
     };
 
-    // Fetch blog posts automatically when the component mounts
     useEffect(() => {
         fetchBlogPosts();
-        // Optional: Implement polling to periodically fetch new posts
-        // const intervalId = setInterval(fetchBlogPosts, 300000);
-        // return () => clearInterval(intervalId);
     }, []);
 
     // Filter posts by category and search term
@@ -138,10 +135,8 @@ const BlogPage = () => {
         return matchesSearch && matchesCategory;
     });
 
-    // Get featured post: Always the latest fetched post that also matches current filters
     const featuredPost = filteredPosts.length > 0 ? filteredPosts[0] : null;
 
-    // Modal component
     const ArticleModal = ({ post, onClose }: { post: BlogPost | null, onClose: () => void }) => {
         if (!post) return null;
         return (
@@ -193,7 +188,6 @@ const BlogPage = () => {
         <div className="w-full bg-[#212121] min-h-screen">
             {/* Hero Section */}
             <section className="bg-gradient-to-b from-[#212121] to-[#181818] text-white text-center py-20 relative overflow-hidden">
-                {/* Decorative Background Elements */}
                 <div className="absolute inset-0 opacity-10">
                     {[...Array(15)].map((_, i) => (
                         <div
@@ -287,7 +281,7 @@ const BlogPage = () => {
                     {!isLoading && filteredPosts.length === 0 && !error && (
                         <div className="text-center py-20 text-gray-400 text-lg">
                             No blog posts found. New AI-generated posts will appear here automatically.
-                            <p className="mt-2 text-sm">Try generating some posts via your backend's `/api/blog/generate-ai` endpoint!</p>
+                            
                         </div>
                     )}
 
@@ -295,7 +289,6 @@ const BlogPage = () => {
                     {featuredPost && !isLoading && !error && (activeCategory === 'all' || activeCategory === 'ai-content') && searchTerm === '' && (
                         <div className="mb-20">
                             <div className="relative bg-[#232323] rounded-lg overflow-hidden border border-gray-600 hover:border-[#F7BF24] transition-all duration-500 group">
-                                {/* Featured Badge */}
                                 <div className="absolute top-6 left-6 z-10">
                                     <div className="bg-[#F7BF24] text-black px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide flex items-center gap-2">
                                         <div className="w-2 h-2 bg-black rounded-full animate-pulse"></div>
