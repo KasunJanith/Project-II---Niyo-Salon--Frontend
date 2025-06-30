@@ -10,33 +10,25 @@ import {
   CalendarIcon,
   ClockIcon,
 } from "lucide-react";
+import { 
+  appointmentService, 
+  services as serviceList, 
+  convertTo24Hour as convertTimeFormat
+} from "../services/appointmentService";
 
-// Helper function to convert 12-hour time to 24-hour format
-function convertTo24Hour(time12h: string) {
-  const [time, modifier] = time12h.split(" ");
-  let [hours, minutes] = time.split(":").map(Number);
-
-  if (modifier === "PM" && hours !== 12) {
-    hours += 12;
-  }
-  if (modifier === "AM" && hours === 12) {
-    hours = 0;
-  }
-  return `${hours.toString().padStart(2, "0")}:${minutes
-    .toString()
-    .padStart(2, "0")}`;
-}
-
-const services = [
-  { id: 1, name: "Haircut", icon: ScissorsIcon, price: 50 },
-  { id: 2, name: "Tattoo", icon: PencilIcon, price: 120 },
-  { id: 3, name: "Piercing", icon: GemIcon, price: 40 },
-  { id: 4, name: "Spa", icon: SpaceIcon, price: 80 },
-];
+// Map services from service list to UI format
+const services = serviceList.slice(0, 4).map(service => ({
+  id: service.id,
+  name: service.name,
+  icon: service.name === 'Haircut' ? ScissorsIcon :
+        service.name === 'Tattoo' ? PencilIcon :
+        service.name === 'Piercing' ? GemIcon : SpaceIcon,
+  price: service.price
+}));
 
 const availableTimes = [
   "09:00 AM",
-  "10:00 AM",
+  "10:00 AM", 
   "11:00 AM",
   "12:00 PM",
   "01:00 PM",
@@ -104,39 +96,32 @@ const AppointmentPage = () => {
     const appointmentData = {
       customerName,
       customerPhone,
-      services: selectedServices
+      customerId: 'self', // For logged-in customer self-booking
+      service: selectedServices
         .map((id) => services.find((s) => s.id === id)?.name)
         .join(","),
+      serviceCategory: selectedServices.length > 0 ? 
+        serviceList.find(s => s.name === services.find(srv => srv.id === selectedServices[0])?.name)?.category || 'General' :
+        'General',
       date: selectedDate.toISOString().split("T")[0], // "YYYY-MM-DD"
-      time: convertTo24Hour(selectedTime), // <-- convert here!
+      time: convertTimeFormat(selectedTime), // <-- convert here!
       notes,
     };
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/appointments/book", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(appointmentData),
-      });
-
-      if (response.ok) {
-        alert("Appointment booked successfully!");
-        // Optionally reset form
-        setSelectedServices([]);
-        setSelectedDate(new Date());
-        setSelectedTime("");
-        setNotes("");
-      } else {
-        const error = await response.text();
-        alert("Booking failed: " + error);
-      }
+      // Use the appointment service instead of direct API call
+      await appointmentService.bookAppointment(appointmentData);
+      
+      alert("Appointment booked successfully!");
+      // Reset form
+      setSelectedServices([]);
+      setSelectedDate(new Date());
+      setSelectedTime("");
+      setNotes("");
     } catch (err) {
-      alert("Network error: " + err);
+      console.error('Booking error:', err);
+      alert("Booking failed. Please try again.");
     }
     setLoading(false);
   };
