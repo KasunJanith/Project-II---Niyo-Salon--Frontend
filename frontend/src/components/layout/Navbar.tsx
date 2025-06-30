@@ -37,7 +37,7 @@ const Navbar = () => {
       {/* Subtle Top Accent */}
       <div className="h-px bg-gradient-to-r from-transparent via-[#F7BF24] to-transparent opacity-60"></div>
       
-      <div className=" mx-auto px-6 sm:px-8">
+      <div className="mx-auto px-6 sm:px-8">
         <div className="flex items-center justify-between h-20">
           
           {/* Minimalist Logo */}
