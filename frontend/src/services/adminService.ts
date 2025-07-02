@@ -34,6 +34,29 @@ export interface ServiceResponse {
 }
 
 class AdminService {
+  // Test backend connection
+  async testConnection(): Promise<boolean> {
+    try {
+      const url = `${API_BASE_URL}/services`;
+      debugRequest(url, { method: 'HEAD' });
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        mode: 'cors',
+      });
+      
+      console.log('Connection test response status:', response.status);
+      return response.ok;
+    } catch (error) {
+      console.error('Backend connection test failed:', error);
+      return false;
+    }
+  }
+
   // Get all services
   async getAllServices(): Promise<ServiceResponse[]> {
     try {
