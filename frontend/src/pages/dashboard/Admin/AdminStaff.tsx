@@ -13,46 +13,34 @@ import {
   XCircleIcon,
   ArrowLeftIcon,
   Trash2Icon,
-  ClockIcon,
   XIcon,
-  StarIcon,
-  BriefcaseIcon,
   Users2Icon
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+interface ApiUser {
+  id: number;
+  username: string;
+  phoneNumber: string;
+  role: string;
+  email?: string;
+  createdAt?: string;
+}
 
 interface Staff {
   id: number;
   name: string;
-  email: string;
+  email?: string;
   phone: string;
   role: string;
-  department: string;
   status: string;
   hireDate: string;
   lastActive: string;
-  totalClients: number;
-  avatar: string;
-  address: string;
-  specialties: string[];
-  experience: string;
-  rating: number;
-  workingHours: {
-    monday: { start: string; end: string; isWorking: boolean };
-    tuesday: { start: string; end: string; isWorking: boolean };
-    wednesday: { start: string; end: string; isWorking: boolean };
-    thursday: { start: string; end: string; isWorking: boolean };
-    friday: { start: string; end: string; isWorking: boolean };
-    saturday: { start: string; end: string; isWorking: boolean };
-    sunday: { start: string; end: string; isWorking: boolean };
-  };
-  salary: number;
-  emergencyContact: {
-    name: string;
-    phone: string;
-    relationship: string;
-  };
+  avatar?: string;
+  address?: string;
+  specialties?: string[];
+  experience?: string;
 }
 
 const AdminStaff = () => {
@@ -66,181 +54,61 @@ const AdminStaff = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [selectedStaffMember, setSelectedStaffMember] = useState<Staff | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const itemsPerPage = 8;
 
-  // Mock staff data
-  const staffData = [
-    {
-      id: 1,
-      name: 'Jamie Rodriguez',
-      email: 'jamie.rodriguez@niyosalon.com',
-      phone: '+1 (555) 234-5678',
-      role: 'Senior Hair Stylist',
-      department: 'Hair Services',
-      status: 'active',
-      hireDate: '2023-03-10',
-      lastActive: '2025-06-26',
-      totalClients: 245,
-      avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '123 Oak Street, City, State 12345',
-      specialties: ['Hair Cutting', 'Hair Styling', 'Color Consultation'],
-      experience: '5 years',
-      rating: 4.8,
-      workingHours: {
-        monday: { start: '09:00', end: '17:00', isWorking: true },
-        tuesday: { start: '09:00', end: '17:00', isWorking: true },
-        wednesday: { start: '09:00', end: '17:00', isWorking: true },
-        thursday: { start: '09:00', end: '17:00', isWorking: true },
-        friday: { start: '09:00', end: '17:00', isWorking: true },
-        saturday: { start: '10:00', end: '16:00', isWorking: true },
-        sunday: { start: '', end: '', isWorking: false }
-      },
-      salary: 55000,
-      emergencyContact: {
-        name: 'Maria Rodriguez',
-        phone: '+1 (555) 987-6543',
-        relationship: 'Sister'
+  // Staff data from API
+  const [staffData, setStaffData] = useState<Staff[]>([]);
+
+  // Load staff from backend
+  const loadStaff = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/admin/users', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const usersFromApi = await response.json();
+        // Filter only staff users and map to Staff interface
+        const staffUsers = usersFromApi.filter((user: ApiUser) => user.role === 'staff');
+        const mappedStaff = staffUsers.map((apiUser: ApiUser) => ({
+          id: apiUser.id,
+          name: apiUser.username,
+          email: apiUser.email,
+          phone: apiUser.phoneNumber,
+          role: apiUser.role,
+          status: 'active', // Assuming all users are active
+          hireDate: apiUser.createdAt ? new Date(apiUser.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          lastActive: new Date().toISOString().split('T')[0],
+          specialties: [],
+          experience: '0 years'
+        }));
+        setStaffData(mappedStaff);
+      } else {
+        console.error('Failed to load staff:', response.status, response.statusText);
       }
-    },
-    {
-      id: 2,
-      name: 'Alex Kim',
-      email: 'alex.kim@niyosalon.com',
-      phone: '+1 (555) 456-7890',
-      role: 'Master Barber',
-      department: 'Barber Services',
-      status: 'active',
-      hireDate: '2023-07-18',
-      lastActive: '2025-06-26',
-      totalClients: 198,
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '456 Pine Avenue, City, State 12345',
-      specialties: ['Classic Cuts', 'Beard Styling', 'Hot Towel Shaves'],
-      experience: '8 years',
-      rating: 4.9,
-      workingHours: {
-        monday: { start: '10:00', end: '18:00', isWorking: true },
-        tuesday: { start: '10:00', end: '18:00', isWorking: true },
-        wednesday: { start: '', end: '', isWorking: false },
-        thursday: { start: '10:00', end: '18:00', isWorking: true },
-        friday: { start: '10:00', end: '18:00', isWorking: true },
-        saturday: { start: '09:00', end: '17:00', isWorking: true },
-        sunday: { start: '11:00', end: '15:00', isWorking: true }
-      },
-      salary: 58000,
-      emergencyContact: {
-        name: 'Sarah Kim',
-        phone: '+1 (555) 123-9876',
-        relationship: 'Wife'
-      }
-    },
-    {
-      id: 3,
-      name: 'Jordan Smith',
-      email: 'jordan.smith@niyosalon.com',
-      phone: '+1 (555) 890-1234',
-      role: 'Hair Colorist',
-      department: 'Hair Services',
-      status: 'active',
-      hireDate: '2024-01-08',
-      lastActive: '2025-06-25',
-      totalClients: 156,
-      avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '789 Elm Drive, City, State 12345',
-      specialties: ['Hair Coloring', 'Highlights', 'Balayage'],
-      experience: '3 years',
-      rating: 4.6,
-      workingHours: {
-        monday: { start: '08:00', end: '16:00', isWorking: true },
-        tuesday: { start: '08:00', end: '16:00', isWorking: true },
-        wednesday: { start: '08:00', end: '16:00', isWorking: true },
-        thursday: { start: '08:00', end: '16:00', isWorking: true },
-        friday: { start: '08:00', end: '16:00', isWorking: true },
-        saturday: { start: '', end: '', isWorking: false },
-        sunday: { start: '', end: '', isWorking: false }
-      },
-      salary: 48000,
-      emergencyContact: {
-        name: 'David Smith',
-        phone: '+1 (555) 456-1234',
-        relationship: 'Father'
-      }
-    },
-    {
-      id: 4,
-      name: 'Taylor Morgan',
-      email: 'taylor.morgan@niyosalon.com',
-      phone: '+1 (555) 678-9012',
-      role: 'Spa Specialist',
-      department: 'Spa Services',
-      status: 'active',
-      hireDate: '2023-09-05',
-      lastActive: '2025-06-26',
-      totalClients: 134,
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '321 Cedar Lane, City, State 12345',
-      specialties: ['Facial Treatments', 'Massage Therapy', 'Skincare'],
-      experience: '4 years',
-      rating: 4.7,
-      workingHours: {
-        monday: { start: '09:00', end: '17:00', isWorking: true },
-        tuesday: { start: '09:00', end: '17:00', isWorking: true },
-        wednesday: { start: '09:00', end: '17:00', isWorking: true },
-        thursday: { start: '09:00', end: '17:00', isWorking: true },
-        friday: { start: '09:00', end: '17:00', isWorking: true },
-        saturday: { start: '10:00', end: '14:00', isWorking: true },
-        sunday: { start: '', end: '', isWorking: false }
-      },
-      salary: 52000,
-      emergencyContact: {
-        name: 'Emma Morgan',
-        phone: '+1 (555) 789-0123',
-        relationship: 'Mother'
-      }
-    },
-    {
-      id: 5,
-      name: 'Casey Johnson',
-      email: 'casey.johnson@niyosalon.com',
-      phone: '+1 (555) 345-6789',
-      role: 'Nail Technician',
-      department: 'Nail Services',
-      status: 'inactive',
-      hireDate: '2024-03-15',
-      lastActive: '2025-05-20',
-      totalClients: 89,
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '654 Maple Street, City, State 12345',
-      specialties: ['Manicures', 'Pedicures', 'Nail Art'],
-      experience: '2 years',
-      rating: 4.4,
-      workingHours: {
-        monday: { start: '', end: '', isWorking: false },
-        tuesday: { start: '', end: '', isWorking: false },
-        wednesday: { start: '', end: '', isWorking: false },
-        thursday: { start: '', end: '', isWorking: false },
-        friday: { start: '', end: '', isWorking: false },
-        saturday: { start: '', end: '', isWorking: false },
-        sunday: { start: '', end: '', isWorking: false }
-      },
-      salary: 35000,
-      emergencyContact: {
-        name: 'Michael Johnson',
-        phone: '+1 (555) 234-5678',
-        relationship: 'Brother'
-      }
+    } catch (error) {
+      console.error('Error loading staff:', error);
     }
-  ];
+  };
+
+  // Load staff on component mount
+  useEffect(() => {
+    loadStaff();
+  }, []);
 
   // Filter and sort staff
   const filteredAndSortedStaff = staffData
     .filter(staff => {
       const matchesSearch = staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          staff.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (staff.email && staff.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
                           staff.phone.includes(searchTerm) ||
                           staff.role.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesRole = roleFilter === 'all' || staff.role.toLowerCase().includes(roleFilter.toLowerCase());
@@ -299,9 +167,45 @@ const AdminStaff = () => {
     setShowEditModal(true);
   };
 
-  const handleSetAvailability = (staff: Staff) => {
-    setSelectedStaffMember(staff);
-    setShowAvailabilityModal(true);
+  // Handle individual staff status change
+  const handleStatusChange = async (staffId: number, newStatus: string) => {
+    try {
+      // Since your backend doesn't have a specific status update endpoint, 
+      // we'll update the local state for now
+      setStaffData(prev => prev.map(staff => 
+        staff.id === staffId ? { ...staff, status: newStatus } : staff
+      ));
+      
+      // You can add an API call here when the backend supports it
+      // const token = localStorage.getItem('token');
+      // const response = await fetch(`http://localhost:8080/api/admin/users/${staffId}/status`, {
+      //   method: 'PATCH',
+      //   headers: {
+      //     'Authorization': `Bearer ${token}`,
+      //     'Content-Type': 'application/json'
+      //   },
+      //   body: JSON.stringify({ status: newStatus })
+      // });
+      
+      console.log(`Staff ${staffId} status changed to ${newStatus}`);
+    } catch (error) {
+      console.error('Error updating staff status:', error);
+    }
+  };
+
+  // Handle bulk status change
+  const handleBulkStatusChange = async (newStatus: string) => {
+    try {
+      // Update local state
+      setStaffData(prev => prev.map(staff => 
+        selectedStaff.includes(staff.id) ? { ...staff, status: newStatus } : staff
+      ));
+      
+      console.log(`Bulk status change: ${selectedStaff.length} staff members set to ${newStatus}`);
+      setSelectedStaff([]); // Clear selection after bulk action
+    } catch (error) {
+      console.error('Error updating bulk staff status:', error);
+    }
   };
 
   const handleAddStaff = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -318,7 +222,7 @@ const AdminStaff = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8080/api/admin/add-staff', {
+      const response = await fetch('http://localhost:8080/api/admin/register-staff', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -330,12 +234,26 @@ const AdminStaff = () => {
       if (response.ok) {
         const newStaff = await response.json();
         console.log('Staff added successfully:', newStaff);
+        
+        // Add to local state instead of reloading
+        const mappedNewStaff: Staff = {
+          id: newStaff.id,
+          name: newStaff.username,
+          email: newStaff.email,
+          phone: newStaff.phoneNumber,
+          role: newStaff.role || 'staff',
+          status: 'active', // Assuming new staff are active
+          hireDate: newStaff.createdAt ? new Date(newStaff.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          lastActive: new Date().toISOString().split('T')[0],
+          specialties: [],
+          experience: '0 years'
+        };
+        
+        setStaffData(prev => [...prev, mappedNewStaff]);
         alert('Staff member added successfully!');
         setShowAddModal(false);
         // Reset form
         (e.target as HTMLFormElement).reset();
-        // Optionally refresh the page or update the staff list
-        window.location.reload();
       } else {
         const error = await response.text();
         console.error('Error adding staff:', error);
@@ -398,7 +316,7 @@ const AdminStaff = () => {
       {/* Content */}
       <div className="p-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-[#181818] p-6 rounded-xl border border-gray-700">
             <div className="flex items-center justify-between">
               <div>
@@ -422,23 +340,12 @@ const AdminStaff = () => {
           <div className="bg-[#181818] p-6 rounded-xl border border-gray-700">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Departments</p>
+                <p className="text-gray-400 text-sm">Inactive Staff</p>
                 <p className="text-2xl font-bold text-white">
-                  {new Set(staffData.map(s => s.department)).size}
+                  {staffData.filter(s => s.status === 'inactive').length}
                 </p>
               </div>
-              <BriefcaseIcon size={24} className="text-blue-400" />
-            </div>
-          </div>
-          <div className="bg-[#181818] p-6 rounded-xl border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Avg Rating</p>
-                <p className="text-2xl font-bold text-white">
-                  {(staffData.reduce((sum, s) => sum + s.rating, 0) / staffData.length).toFixed(1)}
-                </p>
-              </div>
-              <StarIcon size={24} className="text-[#F7BF24]" />
+              <XCircleIcon size={24} className="text-red-400" />
             </div>
           </div>
         </div>
@@ -495,13 +402,16 @@ const AdminStaff = () => {
                   {selectedStaff.length} staff member{selectedStaff.length > 1 ? 's' : ''} selected
                 </span>
                 <div className="flex space-x-2">
-                  <button className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-500/30 transition-colors">
-                    Set Schedule
-                  </button>
-                  <button className="px-3 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/30 transition-colors">
+                  <button 
+                    onClick={() => handleBulkStatusChange('active')}
+                    className="px-3 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/30 transition-colors"
+                  >
                     Activate
                   </button>
-                  <button className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors">
+                  <button 
+                    onClick={() => handleBulkStatusChange('inactive')}
+                    className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors"
+                  >
                     Deactivate
                   </button>
                 </div>
@@ -540,7 +450,7 @@ const AdminStaff = () => {
                       onClick={() => handleSort('role')}
                       className="flex items-center space-x-1 text-gray-300 hover:text-white"
                     >
-                      <span>Role & Department</span>
+                      <span>Role</span>
                       {sortField === 'role' && (
                         sortDirection === 'asc' ? <SortAscIcon size={16} /> : <SortDescIcon size={16} />
                       )}
@@ -558,8 +468,6 @@ const AdminStaff = () => {
                       )}
                     </button>
                   </th>
-                  <th className="text-left p-4 text-gray-300">Performance</th>
-                  <th className="text-left p-4 text-gray-300">Schedule</th>
                   <th className="text-left p-4 text-gray-300">Actions</th>
                 </tr>
               </thead>
@@ -592,7 +500,7 @@ const AdminStaff = () => {
                         <span className={`px-2 py-1 rounded border text-xs font-medium ${getRoleBadgeColor(staff.role)}`}>
                           {staff.role}
                         </span>
-                        <p className="text-sm text-gray-400">{staff.department}</p>
+                        <p className="text-sm text-gray-400">{staff.experience} experience</p>
                       </div>
                     </td>
                     <td className="p-4">
@@ -614,28 +522,15 @@ const AdminStaff = () => {
                         ) : (
                           <XCircleIcon size={16} className="text-red-400" />
                         )}
-                        <span className={`px-2 py-1 rounded border text-xs font-medium capitalize ${getStatusBadgeColor(staff.status)}`}>
-                          {staff.status}
-                        </span>
+                        <select
+                          value={staff.status}
+                          onChange={(e) => handleStatusChange(staff.id, e.target.value)}
+                          className={`px-2 py-1 rounded border text-xs font-medium bg-transparent ${getStatusBadgeColor(staff.status)} focus:outline-none focus:ring-1 focus:ring-[#F7BF24]`}
+                        >
+                          <option value="active" className="bg-[#232323] text-white">Active</option>
+                          <option value="inactive" className="bg-[#232323] text-white">Inactive</option>
+                        </select>
                       </div>
-                    </td>
-                    <td className="p-4">
-                      <div className="text-center">
-                        <p className="font-semibold text-white">{staff.totalClients} clients</p>
-                        <div className="flex items-center justify-center space-x-1 mt-1">
-                          <StarIcon size={12} className="text-yellow-400" />
-                          <span className="text-xs text-gray-400">{staff.rating}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <button
-                        onClick={() => handleSetAvailability(staff)}
-                        className="flex items-center space-x-1 text-sm text-blue-400 hover:text-blue-300"
-                      >
-                        <ClockIcon size={14} />
-                        <span>Set Hours</span>
-                      </button>
                     </td>
                     <td className="p-4">
                       <div className="flex items-center space-x-2">
@@ -928,80 +823,6 @@ const AdminStaff = () => {
                     Delete
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Set Availability Modal */}
-        {showAvailabilityModal && selectedStaffMember && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-[#181818] border border-gray-700 rounded-xl p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Set Working Hours</h2>
-                  <p className="text-gray-400">{selectedStaffMember.name} - {selectedStaffMember.role}</p>
-                </div>
-                <button
-                  onClick={() => setShowAvailabilityModal(false)}
-                  className="p-2 hover:bg-[#232323] rounded-lg transition-colors"
-                >
-                  <XIcon size={20} className="text-gray-400" />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {Object.entries(selectedStaffMember.workingHours).map(([day, hours]) => (
-                  <div key={day} className="flex items-center justify-between p-4 bg-[#232323] rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      <input
-                        type="checkbox"
-                        defaultChecked={hours.isWorking}
-                        className="rounded border-gray-600 bg-[#181818] text-[#F7BF24] focus:ring-[#F7BF24]"
-                      />
-                      <span className="text-white font-medium capitalize w-20">{day}</span>
-                    </div>
-                    
-                    {hours.isWorking && (
-                      <div className="flex items-center space-x-3">
-                        <div className="flex items-center space-x-2">
-                          <label className="text-sm text-gray-400">Start:</label>
-                          <input
-                            type="time"
-                            defaultValue={hours.start}
-                            className="bg-[#181818] border border-gray-600 rounded px-2 py-1 text-white focus:border-[#F7BF24] focus:outline-none"
-                          />
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <label className="text-sm text-gray-400">End:</label>
-                          <input
-                            type="time"
-                            defaultValue={hours.end}
-                            className="bg-[#181818] border border-gray-600 rounded px-2 py-1 text-white focus:border-[#F7BF24] focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                    )}
-                    
-                    {!hours.isWorking && (
-                      <span className="text-gray-500 text-sm">Day off</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-              
-              <div className="flex space-x-3 pt-6">
-                <button
-                  onClick={() => setShowAvailabilityModal(false)}
-                  className="flex-1 px-4 py-2 bg-[#232323] border border-gray-600 rounded-lg text-gray-300 hover:bg-[#2a2a2a] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  className="flex-1 px-4 py-2 bg-[#F7BF24] hover:bg-yellow-400 text-black rounded-lg font-semibold transition-colors"
-                >
-                  Save Schedule
-                </button>
               </div>
             </div>
           </div>
