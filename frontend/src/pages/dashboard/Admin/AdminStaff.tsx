@@ -14,7 +14,6 @@ import {
   ArrowLeftIcon,
   Trash2Icon,
   XIcon,
-  BriefcaseIcon,
   Users2Icon
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -67,10 +66,12 @@ const AdminStaff = () => {
   // Load staff from backend
   const loadStaff = async () => {
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch('http://localhost:8080/api/admin/staff', {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         }
       });
 
@@ -90,8 +91,10 @@ const AdminStaff = () => {
           experience: '0 years'
         }));
         setStaffData(mappedStaff);
+        console.log('Staff loaded successfully:', mappedStaff);
       } else {
         console.error('Failed to load staff:', response.status, response.statusText);
+        console.error('Response:', await response.text());
       }
     } catch (error) {
       console.error('Error loading staff:', error);
@@ -161,9 +164,153 @@ const AdminStaff = () => {
     setShowDeleteModal(true);
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!selectedStaffMember) return;
+    
+    setIsSubmitting(true);
+    
+    console.log('Deleting staff member:', selectedStaffMember.id);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:8080/api/admin/staff/${selectedStaffMember.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      console.log('Delete response status:', response.status);
+
+      if (response.ok) {
+        console.log('Staff deleted successfully');
+        
+        // Reload staff data from backend to ensure consistency
+        await loadStaff();
+        
+        alert('Staff member deleted successfully!');
+        setShowDeleteModal(false);
+        setSelectedStaffMember(null);
+      } else {
+        const error = await response.text();
+        console.error('Error deleting staff:', error);
+        alert(`Error: ${error}`);
+      }
+    } catch (error) {
+      console.error('Network error:', error);
+      alert('Network error. Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleEditStaff = (staff: Staff) => {
     setSelectedStaffMember(staff);
     setShowEditModal(true);
+  };
+
+  // Add this function to handle status changes using the dedicated PATCH endpoint
+  const handleStatusChange = async (staffId: number, newStatus: 'active' | 'inactive') => {
+    try {
+      setIsSubmitting(true);
+      const token = localStorage.getItem('token');
+      
+      console.log(`Updating staff ${staffId} status to ${newStatus}`);
+      
+      const response = await fetch(`http://localhost:8080/api/admin/staff/${staffId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          isActive: newStatus === 'active'
+        })
+      });
+
+      console.log('Status update response:', response.status);
+
+      if (response.ok) {
+        const updatedStaff = await response.json();
+        console.log('Status updated successfully:', updatedStaff);
+        
+        // Reload staff data to ensure UI is in sync
+        await loadStaff();
+        
+        alert(`Staff status updated to ${newStatus} successfully!`);
+      } else {
+        const error = await response.text();
+        console.error('Error updating status:', error);
+        alert(`Error: ${error}`);
+      }
+    } catch (error) {
+      console.error('Network error:', error);
+      alert('Network error. Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedStaffMember) return;
+    
+    setIsSubmitting(true);
+    const formData = new FormData(e.currentTarget);
+    
+    // Debug form data
+    console.log('Form status value:', formData.get('status'));
+    console.log('Status comparison:', formData.get('status') === 'active');
+    
+    const payload = {
+      name: formData.get('name') as string,
+      phoneNumber: formData.get('phone') as string,
+      role: formData.get('role') as string,
+      email: formData.get('email') as string || null,
+      isActive: formData.get('status') === 'active'
+    };
+
+    console.log('Edit payload:', payload);
+    console.log('Setting isActive to:', payload.isActive);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:8080/api/admin/staff/${selectedStaffMember.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      console.log('Edit response status:', response.status);
+
+      if (response.ok) {
+        const updatedStaff = await response.json();
+        console.log('Staff updated successfully:', updatedStaff);
+        console.log('API returned isActive:', updatedStaff.isActive);
+        console.log('Expected isActive:', payload.isActive);
+        
+        // Always reload staff data from backend to ensure UI matches backend state
+        // This fixes issues where backend doesn't update status correctly
+        console.log('Reloading all staff data to ensure consistency...');
+        await loadStaff();
+        
+        alert('Staff member updated successfully!');
+        setShowEditModal(false);
+        setSelectedStaffMember(null);
+      } else {
+        const error = await response.text();
+        console.error('Error updating staff:', error);
+        alert(`Error: ${error}`);
+      }
+    } catch (error) {
+      console.error('Network error:', error);
+      alert('Network error. Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAddStaff = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -179,10 +326,12 @@ const AdminStaff = () => {
     };
 
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch('http://localhost:8080/api/admin/add-staff', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(payload)
       });
@@ -191,21 +340,9 @@ const AdminStaff = () => {
         const newStaff = await response.json();
         console.log('Staff added successfully:', newStaff);
         
-        // Add to local state instead of reloading
-        const mappedNewStaff: Staff = {
-          id: newStaff.id,
-          name: newStaff.name,
-          email: newStaff.email,
-          phone: newStaff.phoneNumber,
-          role: newStaff.role || 'staff',
-          status: newStaff.isActive ? 'active' : 'inactive',
-          hireDate: newStaff.createdAt ? new Date(newStaff.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          lastActive: new Date().toISOString().split('T')[0],
-          specialties: [],
-          experience: '0 years'
-        };
+        // Reload staff data from backend to ensure consistency
+        await loadStaff();
         
-        setStaffData(prev => [...prev, mappedNewStaff]);
         alert('Staff member added successfully!');
         setShowAddModal(false);
         // Reset form
@@ -221,12 +358,6 @@ const AdminStaff = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const getStatusBadgeColor = (status: string) => {
-    return status === 'active' 
-      ? 'bg-green-500/20 text-green-400 border-green-500/30' 
-      : 'bg-red-500/20 text-red-400 border-red-500/30';
   };
 
   const getRoleBadgeColor = (role: string) => {
@@ -296,12 +427,12 @@ const AdminStaff = () => {
           <div className="bg-[#181818] p-6 rounded-xl border border-gray-700">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Specialties</p>
+                <p className="text-gray-400 text-sm">Inactive Staff</p>
                 <p className="text-2xl font-bold text-white">
-                  {new Set(staffData.flatMap(s => s.specialties || [])).size}
+                  {staffData.filter(s => s.status === 'inactive').length}
                 </p>
               </div>
-              <BriefcaseIcon size={24} className="text-blue-400" />
+              <XCircleIcon size={24} className="text-red-400" />
             </div>
           </div>
         </div>
@@ -361,10 +492,28 @@ const AdminStaff = () => {
                   <button className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-500/30 transition-colors">
                     Set Schedule
                   </button>
-                  <button className="px-3 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/30 transition-colors">
+                  <button 
+                    onClick={async () => {
+                      for (const staffId of selectedStaff) {
+                        await handleStatusChange(staffId, 'active');
+                      }
+                      setSelectedStaff([]);
+                    }}
+                    disabled={isSubmitting}
+                    className="px-3 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                  >
                     Activate
                   </button>
-                  <button className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors">
+                  <button 
+                    onClick={async () => {
+                      for (const staffId of selectedStaff) {
+                        await handleStatusChange(staffId, 'inactive');
+                      }
+                      setSelectedStaff([]);
+                    }}
+                    disabled={isSubmitting}
+                    className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                  >
                     Deactivate
                   </button>
                 </div>
@@ -437,11 +586,9 @@ const AdminStaff = () => {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center space-x-3">
-                        <img
-                          src={staff.avatar}
-                          alt={staff.name}
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
+                        <div className="w-10 h-10 rounded-full bg-[#F7BF24] flex items-center justify-center text-black font-semibold">
+                          {staff.name.charAt(0).toUpperCase()}
+                        </div>
                         <div>
                           <p className="font-semibold text-white">{staff.name}</p>
                           <p className="text-sm text-gray-400">{staff.experience} experience</p>
@@ -460,7 +607,7 @@ const AdminStaff = () => {
                       <div className="space-y-1">
                         <div className="flex items-center space-x-2 text-sm">
                           <MailIcon size={14} className="text-gray-400" />
-                          <span className="text-gray-300">{staff.email}</span>
+                          <span className="text-gray-300">{staff.email || 'No email'}</span>
                         </div>
                         <div className="flex items-center space-x-2 text-sm">
                           <PhoneIcon size={14} className="text-gray-400" />
@@ -475,9 +622,15 @@ const AdminStaff = () => {
                         ) : (
                           <XCircleIcon size={16} className="text-red-400" />
                         )}
-                        <span className={`px-2 py-1 rounded border text-xs font-medium capitalize ${getStatusBadgeColor(staff.status)}`}>
-                          {staff.status}
-                        </span>
+                        <select
+                          value={staff.status}
+                          onChange={(e) => handleStatusChange(staff.id, e.target.value as 'active' | 'inactive')}
+                          disabled={isSubmitting}
+                          className={`px-2 py-1 rounded border text-xs font-medium bg-[#232323] text-white focus:outline-none focus:border-[#F7BF24] cursor-pointer hover:bg-[#2a2a2a] transition-colors ${staff.status === 'active' ? 'border-green-500/30' : 'border-red-500/30'}`}
+                        >
+                          <option value="active" className="bg-[#232323] text-white">Active</option>
+                          <option value="inactive" className="bg-[#232323] text-white">Inactive</option>
+                        </select>
                       </div>
                     </td>
                     <td className="p-4">
@@ -521,8 +674,24 @@ const AdminStaff = () => {
           {filteredAndSortedStaff.length === 0 && (
             <div className="text-center py-12">
               <Users2Icon size={48} className="text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400 text-lg">No staff members found</p>
-              <p className="text-gray-500 text-sm">Try adjusting your search or filters</p>
+              <p className="text-gray-400 text-lg">
+                {staffData.length === 0 ? 'No staff members added yet' : 'No staff members found'}
+              </p>
+              <p className="text-gray-500 text-sm">
+                {staffData.length === 0 
+                  ? 'Click "Add Staff Member" to get started' 
+                  : 'Try adjusting your search or filters'
+                }
+              </p>
+              {staffData.length === 0 && (
+                <button 
+                  onClick={() => setShowAddModal(true)}
+                  className="mt-4 bg-[#F7BF24] hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-semibold transition-colors duration-200 flex items-center mx-auto"
+                >
+                  <PlusIcon size={18} className="mr-2" />
+                  Add Your First Staff Member
+                </button>
+              )}
             </div>
           )}
 
@@ -684,12 +853,13 @@ const AdminStaff = () => {
                   <XIcon size={20} className="text-gray-400" />
                 </button>
               </div>
-              <form className="space-y-4">
+              <form className="space-y-4" onSubmit={handleEditSubmit}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
                     <input
                       type="text"
+                      name="name"
                       defaultValue={selectedStaffMember.name}
                       className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                     />
@@ -698,7 +868,9 @@ const AdminStaff = () => {
                     <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
                     <input
                       type="email"
-                      defaultValue={selectedStaffMember.email}
+                      name="email"
+                      defaultValue={selectedStaffMember.email || ''}
+                      placeholder="Enter email address"
                       className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                     />
                   </div>
@@ -706,13 +878,24 @@ const AdminStaff = () => {
                     <label className="block text-sm font-medium text-gray-300 mb-2">Phone</label>
                     <input
                       type="tel"
+                      name="phone"
                       defaultValue={selectedStaffMember.phone}
+                      className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Role</label>
+                    <input
+                      type="text"
+                      name="role"
+                      defaultValue={selectedStaffMember.role}
                       className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">Status</label>
                     <select
+                      name="status"
                       defaultValue={selectedStaffMember.status}
                       className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                     >
@@ -731,9 +914,10 @@ const AdminStaff = () => {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-[#F7BF24] hover:bg-yellow-400 text-black rounded-lg font-semibold transition-colors"
+                    disabled={isSubmitting}
+                    className="flex-1 px-4 py-2 bg-[#F7BF24] hover:bg-yellow-400 text-black rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {isSubmitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>
@@ -762,13 +946,11 @@ const AdminStaff = () => {
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      setShowDeleteModal(false);
-                      setSelectedStaffMember(null);
-                    }}
-                    className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition-colors"
+                    onClick={handleDeleteConfirm}
+                    disabled={isSubmitting}
+                    className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Delete
+                    {isSubmitting ? 'Deleting...' : 'Delete'}
                   </button>
                 </div>
               </div>
