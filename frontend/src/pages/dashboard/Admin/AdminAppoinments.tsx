@@ -20,7 +20,6 @@ import {
   MoreVerticalIcon
 } from 'lucide-react';
 import {
-  appointmentService,
   services,
   staffMembers,
   customers,
@@ -35,19 +34,17 @@ interface Appointment extends AppointmentBooking {
   avatar: string;
 }
 
-// Convert shared appointment to admin appointment format
-const convertToAdminAppointment = (appointment: AppointmentBooking): Appointment => ({
-  ...appointment,
-  customerEmail: appointment.customerEmail || `${appointment.customerName.toLowerCase().replace(' ', '.')}@email.com`,
-  serviceCategory: appointment.serviceCategory || 'General',
-  serviceDuration: appointment.serviceDuration || '60 min',
-  servicePrice: appointment.servicePrice || 50,
-  staffName: appointment.staffName || staffMembers.find(s => s.id === appointment.staffId)?.name || 'Unassigned',
-  endTime: appointment.endTime || calculateEndTime(appointment.time, 60),
-  status: appointment.status || 'pending',
-  priority: appointment.priority || 'medium',
-  avatar: '/api/placeholder/40/40'
-});
+// Backend appointment DTO interface
+interface BackendAppointmentDTO {
+  id: number;
+  customerName: string;
+  customerPhone: string;
+  services: string;
+  date: string; // LocalDate as string (YYYY-MM-DD)
+  time: string; // LocalTime as string (HH:MM:SS)
+  notes?: string;
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
+}
 
 function AdminAppointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -78,76 +75,119 @@ function AdminAppointments() {
     notes: ''
   });
 
-  // Load appointments from service
+  // Load appointments from backend API
   useEffect(() => {
     loadAppointments();
   }, []);
 
   const loadAppointments = async () => {
     try {
-      const appointmentData = await appointmentService.getAllAppointments();
-      const adminAppointments = appointmentData.map(convertToAdminAppointment);
-      setAppointments(adminAppointments);
+      const response = await fetch('http://localhost:8080/api/appointments', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const appointmentData = await response.json();
+        // Map backend AppointmentDTO to frontend Appointment interface
+        const adminAppointments = appointmentData.map((appointment: BackendAppointmentDTO) => ({
+          id: appointment.id.toString(),
+          customerName: appointment.customerName,
+          customerEmail: `${appointment.customerName.toLowerCase().replace(' ', '.')}@email.com`, // Generate email since backend doesn't have it
+          customerPhone: appointment.customerPhone,
+          customerId: appointment.id.toString(),
+          service: appointment.services, // This contains comma-separated services
+          serviceCategory: 'General', // Default category
+          serviceDuration: '60 min', // Default duration
+          servicePrice: 50, // Default price - you might want to calculate this based on services
+          staffName: 'Unassigned', // Backend doesn't have staff assignment yet
+          staffId: undefined,
+          date: appointment.date, // Backend sends LocalDate as string (YYYY-MM-DD)
+          time: appointment.time.substring(0, 5), // Backend sends LocalTime, convert to HH:MM
+          endTime: calculateEndTime(appointment.time.substring(0, 5), 60), // Calculate end time
+          status: appointment.status.toLowerCase() as 'pending' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled',
+          notes: appointment.notes || '',
+          priority: 'medium' as const,
+          bookedBy: 'customer' as const,
+          bookedByUserId: undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          avatar: '/api/placeholder/40/40'
+        }));
+        setAppointments(adminAppointments);
+      } else {
+        console.error('Failed to load appointments:', response.status, response.statusText);
+        if (response.status === 403) {
+          console.error('Backend security is blocking access. Please check backend security configuration.');
+          alert('Unable to access appointments. Please ensure the backend is running and properly configured.');
+        }
+        setAppointments([]); // Set empty array on error
+      }
     } catch (error) {
       console.error('Failed to load appointments:', error);
+      alert('Unable to connect to backend. Please check if the backend server is running on http://localhost:8080');
+      setAppointments([]); // Set empty array on error
     }
   };
 
   // Handle creating new appointment
   const handleCreateAppointment = async () => {
-    if (!newAppointment.customerName || !newAppointment.service || !newAppointment.staffId || 
+    if (!newAppointment.customerName || !newAppointment.service || 
         !newAppointment.date || !newAppointment.time) {
       alert('Please fill all required fields.');
       return;
     }
 
     try {
-      const selectedService = services.find(s => s.name === newAppointment.service);
-      const selectedStaff = staffMembers.find(s => s.id === newAppointment.staffId);
-      
-      const appointmentData: Omit<AppointmentBooking, 'id'> = {
+      // Prepare data for backend API
+      const appointmentData = {
         customerName: newAppointment.customerName,
-        customerEmail: newAppointment.customerEmail,
-        customerPhone: newAppointment.customerPhone,
-        customerId: newAppointment.customerId || undefined,
-        service: newAppointment.service,
-        serviceCategory: selectedService?.category || 'General',
-        serviceDuration: selectedService ? `${selectedService.duration} min` : '60 min',
-        servicePrice: selectedService?.price || 50,
-        staffName: selectedStaff?.name,
-        staffId: newAppointment.staffId,
-        date: newAppointment.date,
-        time: newAppointment.time,
-        endTime: selectedService ? calculateEndTime(newAppointment.time, selectedService.duration) : calculateEndTime(newAppointment.time, 60),
-        status: 'pending',
-        notes: newAppointment.notes,
-        priority: 'medium',
-        bookedBy: 'admin', // Admin is creating this appointment
-        bookedByUserId: 'admin-user' // In real app, this would be current admin user ID
+        customerPhone: newAppointment.customerPhone || '000-000-0000', // Default if not provided
+        services: newAppointment.service, // Single service for now
+        date: newAppointment.date, // Already in YYYY-MM-DD format
+        time: newAppointment.time + ':00', // Convert HH:MM to HH:MM:SS for backend
+        notes: newAppointment.notes || null,
+        userId: null // No staff assignment for now
       };
 
-      await appointmentService.createAppointment(appointmentData, 'admin-user');
-      
-      // Reset form
-      setNewAppointment({
-        customerName: '',
-        customerEmail: '',
-        customerPhone: '',
-        customerId: '',
-        service: '',
-        staffId: '',
-        date: '',
-        time: '',
-        notes: ''
+      const response = await fetch('http://localhost:8080/api/appointments/book', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(appointmentData)
       });
-      
-      setShowAddModal(false);
-      loadAppointments(); // Reload appointments to show the new one
-      
-      alert('Appointment created successfully!');
+
+      if (response.ok) {
+        // Reset form
+        setNewAppointment({
+          customerName: '',
+          customerEmail: '',
+          customerPhone: '',
+          customerId: '',
+          service: '',
+          staffId: '',
+          date: '',
+          time: '',
+          notes: ''
+        });
+        
+        setShowAddModal(false);
+        
+        // Reload appointments to show the new one
+        await loadAppointments();
+        
+        alert('Appointment created successfully!');
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to create appointment:', errorText);
+        alert('Failed to create appointment. Please try again.');
+      }
     } catch (error) {
       console.error('Failed to create appointment:', error);
-      alert('Failed to create appointment. Please try again.');
+      alert('Network error. Please check your connection and try again.');
     }
   };
 
@@ -236,10 +276,34 @@ function AdminAppointments() {
     }
   };
 
-  const handleStatusChange = (appointmentId: string, newStatus: string) => {
-    setAppointments(prev => prev.map(apt => 
-      apt.id === appointmentId ? { ...apt, status: newStatus as Appointment['status'] } : apt
-    ));
+  const handleStatusChange = async (appointmentId: string, newStatus: string) => {
+    try {
+      // Convert frontend status to backend status format
+      const backendStatus = newStatus.toUpperCase() as 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
+      
+      const response = await fetch(`http://localhost:8080/api/appointments/${appointmentId}/status?status=${backendStatus}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        // Update local state
+        setAppointments(prev => prev.map(apt => 
+          apt.id === appointmentId ? { 
+            ...apt, 
+            status: newStatus as Appointment['status'] 
+          } : apt
+        ));
+      } else {
+        console.error('Failed to update appointment status:', response.status);
+        alert('Failed to update appointment status. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error updating appointment status:', error);
+      alert('Network error. Please check your connection and try again.');
+    }
   };
 
   const handleViewAppointment = (appointment: Appointment) => {
@@ -492,7 +556,7 @@ function AdminAppointments() {
               <div className="grid grid-cols-7 gap-1">
                 {generateCalendarDays().map((day, index) => {
                   if (!day) {
-                    return <div key={index} className="h-24"></div>;
+                    return <div key={`empty-${index}`} className="h-24"></div>;
                   }
 
                   const dayAppointments = getAppointmentsForDate(day);
@@ -501,7 +565,7 @@ function AdminAppointments() {
 
                   return (
                     <div
-                      key={day}
+                      key={`${currentMonth.getFullYear()}-${currentMonth.getMonth()}-${day}`}
                       onClick={() => setSelectedDate(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day))}
                       className={`h-24 p-2 border border-gray-700 rounded-lg cursor-pointer transition-all duration-200 hover:bg-[#232323] hover:border-[#F7BF24] ${
                         isToday ? 'bg-[#F7BF24]/10 border-[#F7BF24]' : ''
@@ -935,20 +999,20 @@ function AdminAppointments() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Staff Member *</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Staff Member (Optional)</label>
                   <select 
                     value={newAppointment.staffId}
                     onChange={(e) => setNewAppointment(prev => ({ ...prev, staffId: e.target.value }))}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
                   >
-                    <option value="">Select Staff</option>
+                    <option value="">No staff assigned</option>
                     {availableStaff.map(staff => (
                       <option key={staff.id} value={staff.id}>
                         {staff.name} - {staff.role}
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">Staff assignment can be done later</p>
                 </div>
 
                 <div>
@@ -1045,7 +1109,7 @@ function AdminAppointments() {
                 </button>
                 <button 
                   onClick={handleCreateAppointment}
-                  disabled={!newAppointment.customerName || !newAppointment.service || !newAppointment.staffId || !newAppointment.date || !newAppointment.time}
+                  disabled={!newAppointment.customerName || !newAppointment.service || !newAppointment.date || !newAppointment.time}
                   className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-6 py-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Create Appointment
