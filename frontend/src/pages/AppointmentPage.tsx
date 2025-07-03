@@ -17,6 +17,8 @@ import {
   StarIcon
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { adminService, ServiceResponse } from "../services/adminService";
+import { bookingService, AppointmentRequest } from "../services/bookingService";
 
 // Helper function to convert 12-hour time to 24-hour format
 function convertTo24Hour(time12h: string) {
@@ -42,80 +44,28 @@ interface Service {
   price: number;
   duration: number;
   category: string;
+  requirements?: string[];
+  staffAssigned?: string[];
+  isActive?: boolean;
+  popularityRank?: number;
   icon: LucideIcon;
   available: boolean;
-  rating: number;
 }
 
-// Enhanced services data to match AdminServices style
-const services: Service[] = [
-  {
-    id: 1,
-    name: "Premium Haircut",
-    description: "Professional haircut with consultation and styling",
-    price: 65,
-    duration: 60,
-    category: "Hair Services",
-    icon: ScissorsIcon,
-    available: true,
-    rating: 4.9
-  },
-  {
-    id: 2,
-    name: "Hair Coloring",
-    description: "Full hair coloring service with premium products",
-    price: 120,
-    duration: 120,
-    category: "Hair Services",
-    icon: PencilIcon,
-    available: true,
-    rating: 4.8
-  },
-  {
-    id: 3,
-    name: "Beard Styling",
-    description: "Professional beard trim and styling",
-    price: 40,
-    duration: 30,
-    category: "Barber Services",
-    icon: GemIcon,
-    available: true,
-    rating: 4.7
-  },
-  {
-    id: 4,
-    name: "Spa Treatment",
-    description: "Relaxing facial and spa therapy session",
-    price: 95,
-    duration: 90,
-    category: "Spa Services",
-    icon: SparklesIcon,
-    available: true,
-    rating: 4.9
-  },
-  {
-    id: 5,
-    name: "Hair Wash & Blow Dry",
-    description: "Professional hair wash and styling",
-    price: 35,
-    duration: 45,
-    category: "Hair Services",
-    icon: ScissorsIcon,
-    available: true,
-    rating: 4.6
-  },
-  {
-    id: 6,
-    name: "Hot Towel Shave",
-    description: "Traditional hot towel shave experience",
-    price: 55,
-    duration: 45,
-    category: "Barber Services",
-    icon: GemIcon,
-    available: true,
-    rating: 4.8
+// Map category to icon
+const getCategoryIcon = (category: string): LucideIcon => {
+  switch (category.toLowerCase()) {
+    case 'hair services':
+      return ScissorsIcon;
+    case 'barber services':
+      return GemIcon;
+    case 'tattoo services':
+      return PencilIcon;
+    default:
+      return SparklesIcon;
   }
-];
+};
+
 const availableTimes = [
   "09:00 AM",
   "10:00 AM",
@@ -131,6 +81,8 @@ const availableTimes = [
 ];
 
 const AppointmentPage = () => {
+  const [services, setServices] = useState<Service[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
   const [selectedServices, setSelectedServices] = useState<number[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>("");
@@ -140,12 +92,39 @@ const AppointmentPage = () => {
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
-  const categories = ["all", "Hair Services", "Barber Services", "Spa Services"];
+  // Dynamically generate categories from services
+  const categories = ["all", ...Array.from(new Set(services.map(service => service.category)))];
 
   // Filter services by category
   const filteredServices = selectedCategory === "all" 
     ? services 
     : services.filter(service => service.category === selectedCategory);
+
+  // Load services from backend
+  useEffect(() => {
+    const loadServices = async () => {
+      try {
+        setServicesLoading(true);
+        const servicesData = await adminService.getAllServices();
+        const servicesWithIcons = servicesData
+          .filter((service: ServiceResponse) => service.isActive !== false) // Only show active services
+          .map((service: ServiceResponse) => ({
+            ...service,
+            icon: getCategoryIcon(service.category),
+            available: true, // Set default availability
+          }));
+        setServices(servicesWithIcons);
+      } catch (error) {
+        console.error('Error loading services:', error);
+        // Set fallback services or show error message
+        setServices([]);
+      } finally {
+        setServicesLoading(false);
+      }
+    };
+
+    loadServices();
+  }, []);
 
   // Fetch logged-in user info on mount
   useEffect(() => {
@@ -191,44 +170,33 @@ const AppointmentPage = () => {
       return;
     }
 
-    const appointmentData = {
+    const appointmentData: AppointmentRequest = {
       customerName,
       customerPhone,
       services: selectedServices
         .map((id) => services.find((s) => s.id === id)?.name)
+        .filter(Boolean)
         .join(","),
       date: selectedDate.toISOString().split("T")[0], // "YYYY-MM-DD"
-      time: convertTo24Hour(selectedTime), // <-- convert here!
+      time: convertTo24Hour(selectedTime), // convert to 24-hour format
       notes,
     };
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8080/api/appointments/book", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(appointmentData),
-      });
-
-      if (response.ok) {
-        alert("Appointment booked successfully!");
-        // Optionally reset form
-        setSelectedServices([]);
-        setSelectedDate(new Date());
-        setSelectedTime("");
-        setNotes("");
-      } else {
-        const error = await response.text();
-        alert("Booking failed: " + error);
-      }
-    } catch (err) {
-      alert("Network error: " + err);
+      await bookingService.bookAppointment(appointmentData);
+      alert("Appointment booked successfully!");
+      // Reset form
+      setSelectedServices([]);
+      setSelectedDate(new Date());
+      setSelectedTime("");
+      setNotes("");
+    } catch (error) {
+      console.error('Booking failed:', error);
+      alert("Booking failed: " + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -302,8 +270,37 @@ const AppointmentPage = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredServices.map((service) => (
+              {/* Services Grid */}
+              {servicesLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {[...Array(6)].map((_, index) => (
+                    <div key={index} className="bg-[#232323] rounded-xl border border-gray-700 p-6">
+                      <div className="animate-pulse">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-12 h-12 bg-gray-600 rounded-lg"></div>
+                          <div className="flex-1">
+                            <div className="h-4 bg-gray-600 rounded mb-2"></div>
+                            <div className="h-3 bg-gray-600 rounded w-2/3"></div>
+                          </div>
+                        </div>
+                        <div className="h-3 bg-gray-600 rounded mb-4 w-3/4"></div>
+                        <div className="flex justify-between">
+                          <div className="h-4 bg-gray-600 rounded w-16"></div>
+                          <div className="h-4 bg-gray-600 rounded w-20"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filteredServices.length === 0 ? (
+                <div className="text-center py-12">
+                  <ScissorsIcon className="h-16 w-16 text-gray-500 mx-auto mb-4" />
+                  <p className="text-gray-400 text-lg mb-2">No services available</p>
+                  <p className="text-gray-500 text-sm">Please check back later or contact us for assistance.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {filteredServices.map((service) => (
                   <div
                     key={service.id}
                     className={`relative bg-[#232323] rounded-xl border-2 transition-all duration-300 cursor-pointer hover:shadow-lg hover:shadow-[#F7BF24]/10 ${
@@ -357,7 +354,7 @@ const AppointmentPage = () => {
                               </span>
                               <div className="flex items-center gap-1">
                                 <StarIcon className="h-3 w-3 text-yellow-400 fill-current" />
-                                <span className="text-xs text-gray-400">{service.rating}</span>
+                                <span className="text-xs text-gray-400">{service.popularityRank ? (5 - service.popularityRank * 0.1).toFixed(1) : "4.5"}</span>
                               </div>
                             </div>
                           </div>
@@ -404,8 +401,9 @@ const AppointmentPage = () => {
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Select Date & Time */}

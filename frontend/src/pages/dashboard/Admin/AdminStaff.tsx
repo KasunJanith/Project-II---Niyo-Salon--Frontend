@@ -62,6 +62,12 @@ const AdminStaff = () => {
 
   // Staff data from API
   const [staffData, setStaffData] = useState<Staff[]>([]);
+  
+  // Get unique roles from staff data for filter dropdown
+  const getUniqueRoles = () => {
+    const roles = staffData.map(staff => staff.role).filter(Boolean);
+    return [...new Set(roles)].sort();
+  };
 
   // Load staff from backend
   const loadStaff = async () => {
@@ -462,11 +468,11 @@ const AdminStaff = () => {
                   className="bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                 >
                   <option value="all">All Roles</option>
-                  <option value="stylist">Stylists</option>
-                  <option value="barber">Barbers</option>
-                  <option value="colorist">Colorists</option>
-                  <option value="spa">Spa</option>
-                  <option value="nail">Nail Tech</option>
+                  {getUniqueRoles().map(role => (
+                    <option key={role} value={role}>
+                      {role.charAt(0).toUpperCase() + role.slice(1)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <select
