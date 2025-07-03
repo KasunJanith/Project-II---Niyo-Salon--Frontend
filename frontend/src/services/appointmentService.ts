@@ -17,7 +17,7 @@ export interface AppointmentBooking {
   date: string; // YYYY-MM-DD format
   time: string; // HH:MM format (24-hour)
   endTime?: string;
-  status?: 'pending' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'rescheduled';
+  status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
   notes?: string;
   priority?: 'low' | 'medium' | 'high';
   bookedBy: 'customer' | 'admin' | 'staff'; // Track who created the appointment
@@ -212,7 +212,7 @@ class AppointmentStorage {
         date: '2025-06-27',
         time: '10:00',
         endTime: '11:30',
-        status: 'confirmed',
+        status: 'CONFIRMED',
         notes: 'Customer prefers layers',
         priority: 'medium',
         bookedBy: 'customer',
@@ -235,7 +235,7 @@ class AppointmentStorage {
         date: '2025-06-27',
         time: '11:30',
         endTime: '12:15',
-        status: 'in-progress',
+        status: 'CONFIRMED',
         notes: 'Regular customer',
         priority: 'low',
         bookedBy: 'admin',
@@ -258,7 +258,7 @@ class AppointmentStorage {
         date: '2025-06-27',
         time: '14:00',
         endTime: '16:30',
-        status: 'pending',
+        status: 'PENDING',
         notes: 'First time customer - booked online',
         priority: 'high',
         bookedBy: 'customer',
@@ -281,7 +281,7 @@ class AppointmentStorage {
         date: '2025-06-28',
         time: '15:30',
         endTime: '17:30',
-        status: 'confirmed',
+        status: 'CONFIRMED',
         notes: 'Anniversary special - staff booked for customer',
         priority: 'high',
         bookedBy: 'staff',
@@ -304,7 +304,7 @@ class AppointmentStorage {
         date: '2025-06-29',
         time: '09:00',
         endTime: '10:15',
-        status: 'confirmed',
+        status: 'CONFIRMED',
         notes: 'Customer self-booked online',
         priority: 'medium',
         bookedBy: 'customer',
@@ -326,7 +326,7 @@ class AppointmentStorage {
       id: generateAppointmentId(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      status: appointment.status || 'pending'
+      status: appointment.status || 'PENDING'
     };
     appointments.push(newAppointment);
     this.save(appointments);
@@ -397,7 +397,7 @@ export const appointmentService = {
   cancelAppointment: async (id: string, reason?: string): Promise<boolean> => {
     // In real app, this would be an API call
     const updated = AppointmentStorage.update(id, { 
-      status: 'cancelled', 
+      status: 'CANCELLED', 
       notes: reason ? `Cancelled: ${reason}` : 'Cancelled'
     });
     return updated !== null;
@@ -424,13 +424,13 @@ export const appointmentService = {
       return !dayAppointments.some(apt => 
         apt.staffId === staffId && 
         apt.time === time && 
-        apt.status !== 'cancelled'
+        apt.status !== 'CANCELLED'
       );
     } else {
       // Check general availability (any staff can handle)
       return dayAppointments.filter(apt => 
         apt.time === time && 
-        apt.status !== 'cancelled'
+        apt.status !== 'CANCELLED'
       ).length < staffMembers.length;
     }
   }

@@ -28,6 +28,7 @@ import {
   calculateEndTime,
   type AppointmentBooking
 } from '../../../services/appointmentService';
+import { adminService, type ServiceResponse } from '../../../services/adminService';
 
 // Use the shared appointment interface but extend it for admin view
 interface Appointment extends AppointmentBooking {
@@ -62,6 +63,17 @@ function AdminAppointments() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [newStaffId, setNewStaffId] = useState('');
 
+  // Staff-related state
+  const [activeStaffList, setActiveStaffList] = useState<Array<{id: number, name: string, role: string, isActive: boolean}>>([]);
+  const [activeStaffCount, setActiveStaffCount] = useState(0);
+  const [availableStaffForSlot, setAvailableStaffForSlot] = useState<Array<{id: number, name: string, role: string}>>([]);
+  const [slotAvailabilityCache, setSlotAvailabilityCache] = useState<Map<string, number>>(new Map());
+  const [isAssigningStaff, setIsAssigningStaff] = useState(false);
+
+  // Services state
+  const [servicesList, setServicesList] = useState<ServiceResponse[]>([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+
   // Form states for add appointment modal
   const [newAppointment, setNewAppointment] = useState({
     customerName: '',
@@ -78,6 +90,8 @@ function AdminAppointments() {
   // Load appointments from backend API
   useEffect(() => {
     loadAppointments();
+    loadActiveStaff();
+    loadServices();
   }, []);
 
   const loadAppointments = async () => {
@@ -101,20 +115,19 @@ function AdminAppointments() {
           service: appointment.services, // This contains comma-separated services
           serviceCategory: 'General', // Default category
           serviceDuration: '60 min', // Default duration
-          servicePrice: 50, // Default price - you might want to calculate this based on services
           staffName: 'Unassigned', // Backend doesn't have staff assignment yet
           staffId: undefined,
           date: appointment.date, // Backend sends LocalDate as string (YYYY-MM-DD)
           time: appointment.time.substring(0, 5), // Backend sends LocalTime, convert to HH:MM
           endTime: calculateEndTime(appointment.time.substring(0, 5), 60), // Calculate end time
-          status: appointment.status.toLowerCase() as 'pending' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled',
+          status: appointment.status as 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED',
           notes: appointment.notes || '',
           priority: 'medium' as const,
           bookedBy: 'customer' as const,
           bookedByUserId: undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          avatar: '/api/placeholder/40/40'
+          avatar: undefined // Remove placeholder URL that causes 403 error
         }));
         setAppointments(adminAppointments);
       } else {
@@ -132,6 +145,181 @@ function AdminAppointments() {
     }
   };
 
+  // Load active staff from backend
+  const loadActiveStaff = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/admin/staff', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const staffFromApi = await response.json();
+        const activeStaff = staffFromApi.filter((staff: {id: number, name: string, role: string, isActive: boolean}) => staff.isActive);
+        
+        setActiveStaffList(activeStaff);
+        setActiveStaffCount(activeStaff.length);
+        
+        console.log(`Loaded ${activeStaff.length} active staff members`);
+      } else {
+        console.error('Failed to load staff:', response.status, response.statusText);
+        setActiveStaffList([]);
+        setActiveStaffCount(0);
+      }
+    } catch (error) {
+      console.error('Error loading staff:', error);
+      setActiveStaffList([]);
+      setActiveStaffCount(0);
+    }
+  };
+
+  // Load services from backend
+  const loadServices = async () => {
+    try {
+      setLoadingServices(true);
+      const servicesFromApi = await adminService.getAllServices();
+      setServicesList(servicesFromApi);
+      console.log(`Loaded ${servicesFromApi.length} services`);
+    } catch (error) {
+      console.error('Error loading services:', error);
+      setServicesList([]);
+    } finally {
+      setLoadingServices(false);
+    }
+  };
+
+  // Helper functions for filter dropdowns
+  const getUniqueServices = () => {
+    if (loadingServices) {
+      return []; // Return empty array while loading
+    }
+    if (servicesList.length === 0) {
+      return []; // Return empty array if no services loaded
+    }
+    const categories = servicesList.map(service => service.category).filter(Boolean);
+    return [...new Set(categories)].sort();
+  };
+
+  const getUniqueStaffNames = () => {
+    if (activeStaffList.length === 0) {
+      return []; // Return empty array when no staff loaded yet
+    }
+    return activeStaffList.map(staff => ({ id: staff.id.toString(), name: staff.name })).sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  // Check slot availability (how many appointments exist for a specific date/time)
+  const checkSlotAvailability = async (date: string, time: string) => {
+    const slotKey = `${date}-${time}`;
+    
+    // Check cache first
+    if (slotAvailabilityCache.has(slotKey)) {
+      return slotAvailabilityCache.get(slotKey) || 0;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/appointments/slot?date=${date}&time=${time}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const slotAppointments = await response.json();
+        const bookedCount = slotAppointments.length;
+        
+        // Cache the result
+        setSlotAvailabilityCache(prev => new Map(prev.set(slotKey, bookedCount)));
+        
+        return bookedCount;
+      } else {
+        console.error('Failed to check slot availability:', response.status);
+        return 0;
+      }
+    } catch (error) {
+      console.error('Error checking slot availability:', error);
+      return 0;
+    }
+  };
+
+  // Get available staff for a specific time slot
+  const getAvailableStaffForSlot = async (date: string, time: string) => {
+    try {
+      // Instead of calling an API, we'll use the already loaded active staff list
+      // For now, we assume all active staff are available (basic implementation)
+      // In the future, this could be enhanced with actual scheduling logic
+      
+      console.log('Getting available staff for slot:', date, time);
+      console.log('Active staff list:', activeStaffList);
+      
+      // Use the active staff that we already loaded
+      const availableStaff = activeStaffList.filter(staff => staff.isActive);
+      
+      setAvailableStaffForSlot(availableStaff);
+      console.log('Available staff for slot:', availableStaff);
+      
+      return availableStaff;
+    } catch (error) {
+      console.error('Error getting available staff:', error);
+      // Fallback to all active staff
+      setAvailableStaffForSlot(activeStaffList);
+      return activeStaffList;
+    }
+  };
+
+  // Assign staff to appointment
+  const assignStaffToAppointment = async (appointmentId: string, staffId: number) => {
+    try {
+      setIsAssigningStaff(true);
+      
+      // Find staff member details
+      const staffMember = activeStaffList.find(staff => staff.id === staffId);
+      
+      if (!staffMember) {
+        alert('Selected staff member not found.');
+        return false;
+      }
+      
+      console.log('Assigning staff locally:', staffMember.name, 'to appointment:', appointmentId);
+      
+      // Update local appointment state immediately
+      // Note: In a production app, this would need to be persisted to the backend
+      // For now, we'll just update the local state since the backend endpoint doesn't exist
+      setAppointments(prev => prev.map(apt => 
+        apt.id === appointmentId ? {
+          ...apt,
+          staffId: staffId.toString(),
+          staffName: staffMember.name,
+          notes: apt.notes ? `${apt.notes} | Staff assigned: ${staffMember.name}` : `Staff assigned: ${staffMember.name}`
+        } : apt
+      ));
+
+      // Clear slot availability cache for this slot
+      const appointment = appointments.find(apt => apt.id === appointmentId);
+      if (appointment) {
+        const slotKey = `${appointment.date}-${appointment.time}`;
+        setSlotAvailabilityCache(prev => {
+          const newCache = new Map(prev);
+          newCache.delete(slotKey);
+          return newCache;
+        });
+      }
+
+      alert(`Staff "${staffMember.name}" assigned successfully! (Note: This is stored locally until backend endpoint is implemented)`);
+      return true;
+    } catch (error) {
+      console.error('Error assigning staff:', error);
+      alert('Error assigning staff. Please try again.');
+      return false;
+    } finally {
+      setIsAssigningStaff(false);
+    }
+  };
+
   // Handle creating new appointment
   const handleCreateAppointment = async () => {
     if (!newAppointment.customerName || !newAppointment.service || 
@@ -141,6 +329,14 @@ function AdminAppointments() {
     }
 
     try {
+      // Check slot availability before booking
+      const bookedCount = await checkSlotAvailability(newAppointment.date, newAppointment.time);
+      
+      if (bookedCount >= activeStaffCount) {
+        alert(`This time slot is fully booked. There are ${activeStaffCount} active staff members and ${bookedCount} appointments already booked for this slot.`);
+        return;
+      }
+
       // Prepare data for backend API
       const appointmentData = {
         customerName: newAppointment.customerName,
@@ -176,10 +372,19 @@ function AdminAppointments() {
         
         setShowAddModal(false);
         
+        // Clear slot availability cache for this slot
+        const slotKey = `${newAppointment.date}-${newAppointment.time}`;
+        setSlotAvailabilityCache(prev => {
+          const newCache = new Map(prev);
+          newCache.delete(slotKey);
+          return newCache;
+        });
+        
         // Reload appointments to show the new one
         await loadAppointments();
         
-        alert('Appointment created successfully!');
+        const remainingSlots = activeStaffCount - bookedCount - 1;
+        alert(`Appointment created successfully! ${remainingSlots} slots remaining for this time.`);
       } else {
         const errorText = await response.text();
         console.error('Failed to create appointment:', errorText);
@@ -245,24 +450,20 @@ function AdminAppointments() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'confirmed': return 'bg-green-500';
-      case 'pending': return 'bg-yellow-500';
-      case 'in-progress': return 'bg-blue-500';
-      case 'completed': return 'bg-purple-500';
-      case 'cancelled': return 'bg-red-500';
-      case 'rescheduled': return 'bg-orange-500';
+      case 'CONFIRMED': return 'bg-green-500';
+      case 'PENDING': return 'bg-yellow-500';
+      case 'COMPLETED': return 'bg-blue-500';
+      case 'CANCELLED': return 'bg-red-500';
       default: return 'bg-gray-500';
     }
   };
 
   const getStatusTextColor = (status: string) => {
-    switch (status) {
-      case 'confirmed': return 'text-green-400';
-      case 'pending': return 'text-yellow-400';
-      case 'in-progress': return 'text-blue-400';
-      case 'completed': return 'text-purple-400';
-      case 'cancelled': return 'text-red-400';
-      case 'rescheduled': return 'text-orange-400';
+    switch (status.toUpperCase()) {
+      case 'CONFIRMED': return 'text-green-400';
+      case 'PENDING': return 'text-yellow-400';
+      case 'COMPLETED': return 'text-blue-400';
+      case 'CANCELLED': return 'text-red-400';
       default: return 'text-gray-400';
     }
   };
@@ -316,33 +517,37 @@ function AdminAppointments() {
     setShowRescheduleModal(true);
   };
 
-  const handleStaffChange = (appointment: Appointment) => {
+  const handleStaffChange = async (appointment: Appointment) => {
     setSelectedAppointment(appointment);
     setNewStaffId(appointment.staffId || '');
+    
+    // Load available staff for this appointment's time slot
+    if (appointment.date && appointment.time) {
+      await getAvailableStaffForSlot(appointment.date, appointment.time);
+    }
+    
     setShowStaffChangeModal(true);
   };
 
-  const handleStaffUpdate = () => {
+  const handleStaffUpdate = async () => {
     if (selectedAppointment && newStaffId) {
-      const newStaff = availableStaff.find(staff => staff.id === newStaffId);
-      if (newStaff) {
-        setAppointments(prev => prev.map(apt => 
-          apt.id === selectedAppointment.id 
-            ? { 
-                ...apt, 
-                staffId: newStaffId, 
-                staffName: newStaff.name,
-                notes: apt.notes ? `${apt.notes} | Staff changed to ${newStaff.name}` : `Staff changed to ${newStaff.name}`
-              }
-            : apt
-        ));
+      const staffId = parseInt(newStaffId);
+      
+      if (isNaN(staffId)) {
+        alert('Please select a valid staff member.');
+        return;
+      }
+
+      const success = await assignStaffToAppointment(selectedAppointment.id || '', staffId);
+      
+      if (success) {
         setShowStaffChangeModal(false);
         setSelectedAppointment(null);
         setNewStaffId('');
-        
-        // Show success notification (in a real app, this would be a toast notification)
-        alert(`Staff successfully changed to ${newStaff.name}`);
+        setAvailableStaffForSlot([]); // Clear the available staff cache
       }
+    } else {
+      alert('Please select a staff member.');
     }
   };
 
@@ -431,24 +636,24 @@ function AdminAppointments() {
                   className="px-4 py-2 bg-[#232323] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#F7BF24] transition-all duration-200"
                 >
                   <option value="all">All Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="in-progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="rescheduled">Rescheduled</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="CONFIRMED">Confirmed</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
                 </select>
 
                 <select
                   value={filterService}
                   onChange={(e) => setFilterService(e.target.value)}
-                  className="px-4 py-2 bg-[#232323] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#F7BF24] transition-all duration-200"
+                  disabled={loadingServices}
+                  className="px-4 py-2 bg-[#232323] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#F7BF24] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <option value="all">All Services</option>
-                  <option value="Hair">Hair</option>
-                  <option value="Nails">Nails</option>
-                  <option value="Spa">Spa</option>
-                  <option value="Massage">Massage</option>
+                  <option value="all">{loadingServices ? 'Loading Services...' : 'All Services'}</option>
+                  {getUniqueServices().map(service => (
+                    <option key={service} value={service}>
+                      {service}
+                    </option>
+                  ))}
                 </select>
 
                 <select
@@ -457,11 +662,11 @@ function AdminAppointments() {
                   className="px-4 py-2 bg-[#232323] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#F7BF24] transition-all duration-200"
                 >
                   <option value="all">All Staff</option>
-                  <option value="staff-1">Jamie Rodriguez</option>
-                  <option value="staff-2">Alex Kim</option>
-                  <option value="staff-3">Jordan Smith</option>
-                  <option value="staff-4">Taylor Morgan</option>
-                  <option value="staff-5">Riley Parker</option>
+                  {getUniqueStaffNames().map(staff => (
+                    <option key={staff.id} value={staff.id}>
+                      {staff.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -482,17 +687,19 @@ function AdminAppointments() {
           <div className="bg-gradient-to-br from-green-600/20 to-green-700/20 border border-green-500/30 rounded-xl p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Confirmed</p>
-                <p className="text-2xl font-bold text-white">{appointments.filter(a => a.status === 'confirmed').length}</p>
+                <p className="text-gray-400 text-sm">Active Staff</p>
+                <p className="text-2xl font-bold text-white">{activeStaffCount}</p>
+                <p className="text-xs text-gray-500">Available for booking</p>
               </div>
-              <CheckIcon className="h-8 w-8 text-green-400" />
+              <Users2Icon className="h-8 w-8 text-green-400" />
             </div>
           </div>
           <div className="bg-gradient-to-br from-yellow-600/20 to-yellow-700/20 border border-yellow-500/30 rounded-xl p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Pending</p>
-                <p className="text-2xl font-bold text-white">{appointments.filter(a => a.status === 'pending').length}</p>
+                <p className="text-gray-400 text-sm">Unassigned</p>
+                <p className="text-2xl font-bold text-white">{appointments.filter(a => !a.staffId || a.staffName === 'Unassigned').length}</p>
+                <p className="text-xs text-gray-500">Need staff assignment</p>
               </div>
               <ClockIcon className="h-8 w-8 text-yellow-400" />
             </div>
@@ -500,10 +707,11 @@ function AdminAppointments() {
           <div className="bg-gradient-to-br from-purple-600/20 to-purple-700/20 border border-purple-500/30 rounded-xl p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Total Revenue</p>
-                <p className="text-2xl font-bold text-white">${appointments.reduce((acc, apt) => acc + (apt.servicePrice || 0), 0)}</p>
+                <p className="text-gray-400 text-sm">Confirmed</p>
+                <p className="text-2xl font-bold text-white">{appointments.filter(a => a.status === 'CONFIRMED').length}</p>
+                <p className="text-xs text-gray-500">Ready to serve</p>
               </div>
-              <Users2Icon className="h-8 w-8 text-purple-400" />
+              <CheckIcon className="h-8 w-8 text-purple-400" />
             </div>
           </div>
         </div>
@@ -579,7 +787,7 @@ function AdminAppointments() {
                           {dayAppointments.slice(0, 2).map(apt => (
                             <div
                               key={apt.id}
-                              className={`text-xs p-1 mb-1 rounded truncate ${getStatusColor(apt.status || 'pending')} text-white`}
+                              className={`text-xs p-1 mb-1 rounded truncate ${getStatusColor(apt.status || 'PENDING')} text-white`}
                             >
                               {apt.time} - {apt.customerName}
                             </div>
@@ -610,11 +818,9 @@ function AdminAppointments() {
                       className={`flex items-center justify-between p-4 bg-[#232323] rounded-lg border-l-4 ${getPriorityColor(appointment.priority || 'medium')} hover:bg-[#2a2a2a] transition-colors`}
                     >
                       <div className="flex items-center gap-4">
-                        <img
-                          src={appointment.avatar}
-                          alt={appointment.customerName}
-                          className="w-10 h-10 rounded-full bg-gray-600"
-                        />
+                        <div className="w-10 h-10 rounded-full bg-[#F7BF24] flex items-center justify-center text-black font-semibold">
+                          {appointment.customerName.charAt(0).toUpperCase()}
+                        </div>
                         <div>
                           <h4 className="font-medium text-white">{appointment.customerName}</h4>
                           <p className="text-sm text-gray-400">{appointment.service}</p>
@@ -622,8 +828,8 @@ function AdminAppointments() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusTextColor(appointment.status || 'pending')} bg-[#181818]`}>
-                          {appointment.status || 'pending'}
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusTextColor(appointment.status || 'PENDING')} bg-[#181818]`}>
+                          {appointment.status || 'PENDING'}
                         </span>
                         <div className="flex gap-1">
                           <button
@@ -670,7 +876,6 @@ function AdminAppointments() {
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">Staff</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">Date & Time</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">Price</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
@@ -679,11 +884,9 @@ function AdminAppointments() {
                     <tr key={appointment.id} className="hover:bg-[#232323] transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={appointment.avatar}
-                            alt={appointment.customerName}
-                            className="w-10 h-10 rounded-full bg-gray-600"
-                          />
+                          <div className="w-10 h-10 rounded-full bg-[#F7BF24] flex items-center justify-center text-black font-semibold">
+                            {appointment.customerName.charAt(0).toUpperCase()}
+                          </div>
                           <div>
                             <p className="font-medium text-white">{appointment.customerName}</p>
                             <p className="text-sm text-gray-400">{appointment.customerEmail}</p>
@@ -697,7 +900,25 @@ function AdminAppointments() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-white">{appointment.staffName}</p>
+                        <div className="flex items-center gap-2">
+                          {appointment.staffName === 'Unassigned' ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                              <span className="text-red-400 font-medium">Unassigned</span>
+                              <button
+                                onClick={() => handleStaffChange(appointment)}
+                                className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors"
+                              >
+                                Assign Now
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              <span className="text-white">{appointment.staffName}</span>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div>
@@ -707,20 +928,15 @@ function AdminAppointments() {
                       </td>
                       <td className="px-6 py-4">
                         <select
-                          value={appointment.status || 'pending'}
+                          value={appointment.status || 'PENDING'}
                           onChange={(e) => handleStatusChange(appointment.id || '', e.target.value)}
-                          className={`px-3 py-1 text-xs font-semibold rounded-full border-0 focus:outline-none focus:ring-2 focus:ring-purple-500 ${getStatusTextColor(appointment.status || 'pending')} bg-gray-800`}
+                          className={`px-3 py-1 text-xs font-semibold rounded-full border-0 focus:outline-none focus:ring-2 focus:ring-purple-500 ${getStatusTextColor(appointment.status || 'PENDING')} bg-gray-800`}
                         >
-                          <option value="pending">Pending</option>
-                          <option value="confirmed">Confirmed</option>
-                          <option value="in-progress">In Progress</option>
-                          <option value="completed">Completed</option>
-                          <option value="cancelled">Cancelled</option>
-                          <option value="rescheduled">Rescheduled</option>
+                          <option value="PENDING">Pending</option>
+                          <option value="CONFIRMED">Confirmed</option>
+                          <option value="COMPLETED">Completed</option>
+                          <option value="CANCELLED">Cancelled</option>
                         </select>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-white font-medium">${appointment.servicePrice}</p>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
@@ -752,7 +968,7 @@ function AdminAppointments() {
                             <BellIcon className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => handleStatusChange(appointment.id || '', 'cancelled')}
+                            onClick={() => handleStatusChange(appointment.id || '', 'CANCELLED')}
                             className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
                             title="Cancel"
                           >
@@ -788,11 +1004,9 @@ function AdminAppointments() {
                   <h3 className="text-lg font-medium text-white mb-3">Customer Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex items-center gap-3">
-                      <img
-                        src={selectedAppointment.avatar}
-                        alt={selectedAppointment.customerName}
-                        className="w-12 h-12 rounded-full bg-gray-600"
-                      />
+                      <div className="w-12 h-12 rounded-full bg-[#F7BF24] flex items-center justify-center text-black font-semibold text-lg">
+                        {selectedAppointment.customerName.charAt(0).toUpperCase()}
+                      </div>
                       <div>
                         <p className="font-medium text-white">{selectedAppointment.customerName}</p>
                         <p className="text-sm text-gray-400">Customer</p>
@@ -827,10 +1041,6 @@ function AdminAppointments() {
                       <p className="text-sm text-gray-400">Duration</p>
                       <p className="text-white">{selectedAppointment.serviceDuration}</p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Price</p>
-                      <p className="text-white font-medium">${selectedAppointment.servicePrice}</p>
-                    </div>
                   </div>
                 </div>
 
@@ -852,8 +1062,8 @@ function AdminAppointments() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Status</p>
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusTextColor(selectedAppointment.status || 'pending')} bg-gray-800`}>
-                        {selectedAppointment.status || 'pending'}
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusTextColor(selectedAppointment.status || 'PENDING')} bg-gray-800`}>
+                        {selectedAppointment.status || 'PENDING'}
                       </span>
                     </div>
                   </div>
@@ -992,7 +1202,7 @@ function AdminAppointments() {
                     <option value="">Select Service</option>
                     {services.map(service => (
                       <option key={service.id} value={service.name}>
-                        {service.name} - ${service.price} ({service.duration} min)
+                        {service.name} ({service.duration} min)
                       </option>
                     ))}
                   </select>
@@ -1068,12 +1278,6 @@ function AdminAppointments() {
                         <span className="text-gray-400">Staff:</span>
                         <span className="text-white ml-2">
                           {availableStaff.find(s => s.id === newAppointment.staffId)?.name || 'Not selected'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">Price:</span>
-                        <span className="text-white ml-2">
-                          ${services.find(s => s.name === newAppointment.service)?.price || 0}
                         </span>
                       </div>
                       <div>
@@ -1176,7 +1380,7 @@ function AdminAppointments() {
                 </button>
                 <button
                   onClick={() => {
-                    handleStatusChange(selectedAppointment.id || '', 'rescheduled');
+                    handleStatusChange(selectedAppointment.id || '', 'PENDING');
                     setShowRescheduleModal(false);
                   }}
                   className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-6 py-2 rounded-lg transition-all duration-200"
@@ -1190,112 +1394,196 @@ function AdminAppointments() {
 
         {/* Staff Change Modal */}
         {showStaffChangeModal && selectedAppointment && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg border border-gray-700">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">Change Staff Member</h2>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-[#181818] rounded-xl p-4 sm:p-6 w-full max-w-xs sm:max-w-lg lg:max-w-xl max-h-[90vh] overflow-y-auto border border-gray-700 shadow-2xl">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                  <Users2Icon className="h-5 w-5 sm:h-6 sm:w-6 text-[#F7BF24]" />
+                  Change Staff Member
+                </h2>
                 <button
                   onClick={() => {
                     setShowStaffChangeModal(false);
                     setSelectedAppointment(null);
                     setNewStaffId('');
                   }}
-                  className="text-gray-400 hover:text-white transition-colors"
+                  className="text-gray-400 hover:text-white hover:bg-[#232323] rounded-lg p-1 transition-all duration-200"
                 >
-                  <XIcon className="h-6 w-6" />
+                  <XIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 sm:space-y-6">
                 {/* Current Assignment */}
-                <div className="bg-gray-700/30 rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-gray-300 mb-2">Current Assignment</h3>
+                <div className="bg-[#232323] border border-gray-600 rounded-lg p-3 sm:p-4">
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                    <div className="w-2 h-2 bg-[#F7BF24] rounded-full"></div>
+                    Current Assignment
+                  </h3>
                   <div className="flex items-center gap-3">
-                    <Users2Icon className="h-8 w-8 text-gray-400" />
-                    <div>
-                      <p className="font-medium text-white">{selectedAppointment.staffName}</p>
-                      <p className="text-sm text-gray-400">
-                        {availableStaff.find(s => s.id === selectedAppointment.staffId)?.role}
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#2a2a2a] rounded-full flex items-center justify-center">
+                      <Users2Icon className="h-4 w-4 sm:h-5 sm:w-5 text-[#F7BF24]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-white truncate">{selectedAppointment.staffName}</p>
+                      <p className="text-xs sm:text-sm text-gray-400">
+                        {selectedAppointment.staffName === 'Unassigned' ? 'No staff assigned' : 'Currently assigned'}
                       </p>
                     </div>
                   </div>
                 </div>
 
                 {/* Appointment Details */}
-                <div>
-                  <p className="text-sm text-gray-400 mb-1">Appointment Details:</p>
-                  <p className="text-white font-medium">{selectedAppointment.customerName}</p>
-                  <p className="text-sm text-gray-400">{selectedAppointment.service}</p>
-                  <p className="text-sm text-gray-400">
-                    {new Date(selectedAppointment.date).toLocaleDateString()} at {selectedAppointment.time}
-                  </p>
+                <div className="bg-[#232323] border border-gray-600 rounded-lg p-3 sm:p-4">
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
+                    <CalendarIcon className="h-3 w-3 sm:h-4 sm:w-4 text-[#F7BF24]" />
+                    Appointment Details
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                      <span className="text-xs text-gray-400 font-medium">Customer:</span>
+                      <span className="text-white font-medium">{selectedAppointment.customerName}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                      <span className="text-xs text-gray-400 font-medium">Service:</span>
+                      <span className="text-sm text-gray-300">{selectedAppointment.service}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                      <span className="text-xs text-gray-400 font-medium">Date & Time:</span>
+                      <span className="text-sm text-gray-300">
+                        {new Date(selectedAppointment.date).toLocaleDateString()} at {selectedAppointment.time}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Slot Availability Info */}
+                <div className="bg-[#2a2a2a] border border-[#F7BF24]/30 rounded-lg p-3">
+                  <h4 className="text-xs sm:text-sm font-medium text-[#F7BF24] mb-2 flex items-center gap-2">
+                    <ClockIcon className="h-3 w-3 sm:h-4 sm:w-4" />
+                    Slot Information
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-[#232323] rounded px-2 py-1">
+                      <span className="text-gray-400">Active Staff:</span>
+                      <span className="text-white font-semibold ml-1">{activeStaffCount}</span>
+                    </div>
+                    <div className="bg-[#232323] rounded px-2 py-1">
+                      <span className="text-gray-400">Available:</span>
+                      <span className="text-white font-semibold ml-1">{availableStaffForSlot.length}</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* New Staff Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Select New Staff Member
+                  <label className="flex text-sm font-medium text-gray-300 mb-2 items-center gap-2">
+                    <Users2Icon className="h-4 w-4 text-[#F7BF24]" />
+                    Select Staff Member 
+                    {availableStaffForSlot.length === 0 && (
+                      <span className="text-xs text-gray-400">(Loading...)</span>
+                    )}
                   </label>
                   <select
                     value={newStaffId}
                     onChange={(e) => setNewStaffId(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    disabled={availableStaffForSlot.length === 0}
+                    className="w-full px-3 py-2 sm:py-3 bg-[#232323] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#F7BF24] focus:border-[#F7BF24] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm"
                   >
-                    {availableStaff.map(staff => (
+                    <option value="">Select a staff member</option>
+                    {availableStaffForSlot.map(staff => (
                       <option key={staff.id} value={staff.id}>
                         {staff.name} - {staff.role}
                       </option>
                     ))}
                   </select>
+                  {availableStaffForSlot.length === 0 && activeStaffCount > 0 && (
+                    <p className="text-xs text-gray-400 mt-2 flex items-center gap-2">
+                      <div className="w-2 h-2 bg-[#F7BF24] rounded-full animate-pulse"></div>
+                      Loading available staff for this time slot...
+                    </p>
+                  )}
+                  {availableStaffForSlot.length === 0 && activeStaffCount === 0 && (
+                    <p className="text-xs text-red-400 mt-2 flex items-center gap-2">
+                      <XCircleIcon className="h-3 w-3" />
+                      No active staff members available. Please check staff management.
+                    </p>
+                  )}
                 </div>
 
-                {/* Staff Specialties */}
+                {/* Selected Staff Info */}
                 {newStaffId && (
-                  <div className="bg-gray-700/30 rounded-lg p-3">
-                    <h4 className="text-sm font-medium text-gray-300 mb-2">Staff Specialties</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {availableStaff.find(s => s.id === newStaffId)?.specialties.map(specialty => (
-                        <span
-                          key={specialty}
-                          className="px-2 py-1 text-xs bg-purple-600/20 text-purple-300 rounded-full"
-                        >
-                          {specialty}
-                        </span>
-                      ))}
+                  <div className="bg-[#232323] border border-[#F7BF24]/50 rounded-lg p-3 sm:p-4">
+                    <h4 className="text-sm font-medium text-[#F7BF24] mb-3 flex items-center gap-2">
+                      <CheckIcon className="h-4 w-4 text-green-400" />
+                      Selected Staff
+                    </h4>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-[#F7BF24] rounded-full flex items-center justify-center">
+                        <Users2Icon className="h-5 w-5 text-black" />
+                      </div>
+                      {(() => {
+                        const selectedStaff = availableStaffForSlot.find(s => s.id.toString() === newStaffId);
+                        return selectedStaff ? (
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-white">{selectedStaff.name}</p>
+                            <p className="text-sm text-gray-400">{selectedStaff.role}</p>
+                            <div className="flex items-center gap-1 mt-1">
+                              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                              <span className="text-xs text-green-400">Available for this slot</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-400">Staff information not available</p>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
 
                 {/* Reason for Change */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="flex text-sm font-medium text-gray-300 mb-2 items-center gap-2">
+                    <EditIcon className="h-4 w-4 text-[#F7BF24]" />
                     Reason for Staff Change (Optional)
                   </label>
                   <textarea
                     rows={3}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-2 bg-[#232323] border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#F7BF24] focus:border-[#F7BF24] transition-all duration-200 text-sm"
                     placeholder="Optional reason for changing staff member..."
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 mt-6">
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6 pt-4 border-t border-gray-700">
                 <button
                   onClick={() => {
                     setShowStaffChangeModal(false);
                     setSelectedAppointment(null);
                     setNewStaffId('');
                   }}
-                  className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 text-gray-300 hover:text-white hover:bg-[#232323] rounded-lg transition-all duration-200 border border-gray-600"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleStaffUpdate}
-                  disabled={!newStaffId || newStaffId === selectedAppointment.staffId}
-                  className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-6 py-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!newStaffId || newStaffId === selectedAppointment.staffId || isAssigningStaff}
+                  className="w-full sm:w-auto bg-[#F7BF24] hover:bg-[#E5AB20] text-black px-6 py-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg hover:shadow-[#F7BF24]/25 flex items-center justify-center gap-2"
                 >
-                  Change Staff
+                  {isAssigningStaff ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
+                      Assigning...
+                    </>
+                  ) : (
+                    <>
+                      <CheckIcon className="h-4 w-4" />
+                      {selectedAppointment.staffName === 'Unassigned' ? 'Assign Staff' : 'Change Staff'}
+                    </>
+                  )}
                 </button>
               </div>
             </div>
