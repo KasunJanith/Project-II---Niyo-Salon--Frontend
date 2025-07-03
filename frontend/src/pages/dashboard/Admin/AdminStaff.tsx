@@ -14,17 +14,19 @@ import {
   ArrowLeftIcon,
   Trash2Icon,
   XIcon,
+  BriefcaseIcon,
   Users2Icon
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-interface ApiUser {
+interface ApiStaff {
   id: number;
-  username: string;
+  name: string;
+  email?: string;
   phoneNumber: string;
   role: string;
-  email?: string;
+  isActive: boolean;
   createdAt?: string;
 }
 
@@ -65,27 +67,24 @@ const AdminStaff = () => {
   // Load staff from backend
   const loadStaff = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8080/api/admin/users', {
+      const response = await fetch('http://localhost:8080/api/admin/staff', {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
       if (response.ok) {
-        const usersFromApi = await response.json();
-        // Filter only staff users and map to Staff interface
-        const staffUsers = usersFromApi.filter((user: ApiUser) => user.role === 'staff');
-        const mappedStaff = staffUsers.map((apiUser: ApiUser) => ({
-          id: apiUser.id,
-          name: apiUser.username,
-          email: apiUser.email,
-          phone: apiUser.phoneNumber,
-          role: apiUser.role,
-          status: 'active', // Assuming all users are active
-          hireDate: apiUser.createdAt ? new Date(apiUser.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        const staffFromApi = await response.json();
+        // Map API response to our Staff interface
+        const mappedStaff = staffFromApi.map((apiStaff: ApiStaff) => ({
+          id: apiStaff.id,
+          name: apiStaff.name,
+          email: apiStaff.email,
+          phone: apiStaff.phoneNumber,
+          role: apiStaff.role || 'staff',
+          status: apiStaff.isActive ? 'active' : 'inactive',
+          hireDate: apiStaff.createdAt ? new Date(apiStaff.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           lastActive: new Date().toISOString().split('T')[0],
           specialties: [],
           experience: '0 years'
@@ -167,47 +166,6 @@ const AdminStaff = () => {
     setShowEditModal(true);
   };
 
-  // Handle individual staff status change
-  const handleStatusChange = async (staffId: number, newStatus: string) => {
-    try {
-      // Since your backend doesn't have a specific status update endpoint, 
-      // we'll update the local state for now
-      setStaffData(prev => prev.map(staff => 
-        staff.id === staffId ? { ...staff, status: newStatus } : staff
-      ));
-      
-      // You can add an API call here when the backend supports it
-      // const token = localStorage.getItem('token');
-      // const response = await fetch(`http://localhost:8080/api/admin/users/${staffId}/status`, {
-      //   method: 'PATCH',
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`,
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify({ status: newStatus })
-      // });
-      
-      console.log(`Staff ${staffId} status changed to ${newStatus}`);
-    } catch (error) {
-      console.error('Error updating staff status:', error);
-    }
-  };
-
-  // Handle bulk status change
-  const handleBulkStatusChange = async (newStatus: string) => {
-    try {
-      // Update local state
-      setStaffData(prev => prev.map(staff => 
-        selectedStaff.includes(staff.id) ? { ...staff, status: newStatus } : staff
-      ));
-      
-      console.log(`Bulk status change: ${selectedStaff.length} staff members set to ${newStatus}`);
-      setSelectedStaff([]); // Clear selection after bulk action
-    } catch (error) {
-      console.error('Error updating bulk staff status:', error);
-    }
-  };
-
   const handleAddStaff = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -221,12 +179,10 @@ const AdminStaff = () => {
     };
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8080/api/admin/register-staff', {
+      const response = await fetch('http://localhost:8080/api/admin/add-staff', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
       });
@@ -238,11 +194,11 @@ const AdminStaff = () => {
         // Add to local state instead of reloading
         const mappedNewStaff: Staff = {
           id: newStaff.id,
-          name: newStaff.username,
+          name: newStaff.name,
           email: newStaff.email,
           phone: newStaff.phoneNumber,
           role: newStaff.role || 'staff',
-          status: 'active', // Assuming new staff are active
+          status: newStaff.isActive ? 'active' : 'inactive',
           hireDate: newStaff.createdAt ? new Date(newStaff.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           lastActive: new Date().toISOString().split('T')[0],
           specialties: [],
@@ -340,12 +296,12 @@ const AdminStaff = () => {
           <div className="bg-[#181818] p-6 rounded-xl border border-gray-700">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Inactive Staff</p>
+                <p className="text-gray-400 text-sm">Specialties</p>
                 <p className="text-2xl font-bold text-white">
-                  {staffData.filter(s => s.status === 'inactive').length}
+                  {new Set(staffData.flatMap(s => s.specialties || [])).size}
                 </p>
               </div>
-              <XCircleIcon size={24} className="text-red-400" />
+              <BriefcaseIcon size={24} className="text-blue-400" />
             </div>
           </div>
         </div>
@@ -402,16 +358,13 @@ const AdminStaff = () => {
                   {selectedStaff.length} staff member{selectedStaff.length > 1 ? 's' : ''} selected
                 </span>
                 <div className="flex space-x-2">
-                  <button 
-                    onClick={() => handleBulkStatusChange('active')}
-                    className="px-3 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/30 transition-colors"
-                  >
+                  <button className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-500/30 transition-colors">
+                    Set Schedule
+                  </button>
+                  <button className="px-3 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/30 transition-colors">
                     Activate
                   </button>
-                  <button 
-                    onClick={() => handleBulkStatusChange('inactive')}
-                    className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors"
-                  >
+                  <button className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors">
                     Deactivate
                   </button>
                 </div>
@@ -522,14 +475,9 @@ const AdminStaff = () => {
                         ) : (
                           <XCircleIcon size={16} className="text-red-400" />
                         )}
-                        <select
-                          value={staff.status}
-                          onChange={(e) => handleStatusChange(staff.id, e.target.value)}
-                          className={`px-2 py-1 rounded border text-xs font-medium bg-transparent ${getStatusBadgeColor(staff.status)} focus:outline-none focus:ring-1 focus:ring-[#F7BF24]`}
-                        >
-                          <option value="active" className="bg-[#232323] text-white">Active</option>
-                          <option value="inactive" className="bg-[#232323] text-white">Inactive</option>
-                        </select>
+                        <span className={`px-2 py-1 rounded border text-xs font-medium capitalize ${getStatusBadgeColor(staff.status)}`}>
+                          {staff.status}
+                        </span>
                       </div>
                     </td>
                     <td className="p-4">
