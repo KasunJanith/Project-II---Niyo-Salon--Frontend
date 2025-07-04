@@ -22,9 +22,42 @@ import {
   MoreVerticalIcon
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import logo from '../../assets/Niyo Logo.jpg';
 import useUserData from '../../hooks/useUserData';
+import { adminService } from '../../services/adminService';
+
+// Interfaces for real data
+interface Staff {
+  id: number;
+  name: string;
+  email?: string;
+  phone: string;
+  role: string;
+  status: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+interface Customer {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  status: string;
+  registrationDate: string;
+  totalAppointments: number;
+}
+
+interface Service {
+  id: number;
+  name: string;
+  description: string;
+  category: string;
+  price: number;
+  duration: number;
+  isActive: boolean;
+}
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -32,11 +65,90 @@ const AdminDashboard = () => {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const user = useUserData();
 
-  // Key metrics without financial data
+  // Real data states
+  const [staffData, setStaffData] = useState<Staff[]>([]);
+  const [customersData, setCustomersData] = useState<Customer[]>([]);
+  const [servicesData, setServicesData] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load real data on component mount
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true);
+        await Promise.all([
+          loadStaff(),
+          loadCustomers(),
+          loadServices()
+        ]);
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, []);
+
+  // Load staff data
+  const loadStaff = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/admin/staff', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const staffFromApi = await response.json();
+        setStaffData(staffFromApi);
+      }
+    } catch (error) {
+      console.error('Error loading staff:', error);
+    }
+  };
+
+  // Load customers data
+  const loadCustomers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/admin/users', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const usersFromApi = await response.json();
+        const customerUsers = usersFromApi.filter((user: any) => user.role === 'customer');
+        setCustomersData(customerUsers);
+      }
+    } catch (error) {
+      console.error('Error loading customers:', error);
+    }
+  };
+
+  // Load services data
+  const loadServices = async () => {
+    try {
+      const servicesFromApi = await adminService.getAllServices();
+      setServicesData(servicesFromApi);
+    } catch (error) {
+      console.error('Error loading services:', error);
+    }
+  };
+
+  // Calculate real metrics
   const keyMetrics = [
     {
       title: 'Active Appointments',
-      value: 24,
+      value: 0, // You can connect this to appointments API when available
       subtitle: 'Today',
       icon: CalendarIcon,
       color: 'text-blue-400',
@@ -44,41 +156,42 @@ const AdminDashboard = () => {
     },
     {
       title: 'Total Staff',
-      value: 8,
-      subtitle: '6 Available',
+      value: staffData.length,
+      subtitle: `${staffData.filter(s => s.isActive).length} Active`,
       icon: Users2Icon,
       color: 'text-green-400',
       bgColor: 'bg-green-500/10'
     },
     {
       title: 'Total Customers',
-      value: 342,
-      subtitle: '12 New this week',
+      value: customersData.length,
+      subtitle: `${customersData.filter(c => c.status === 'active').length} Active`,
       icon: UsersIcon,
       color: 'text-purple-400',
       bgColor: 'bg-purple-500/10'
     },
     {
       title: 'Active Services',
-      value: 15,
-      subtitle: '3 Categories',
+      value: servicesData.filter(s => s.isActive).length,
+      subtitle: `${new Set(servicesData.map(s => s.category)).size} Categories`,
       icon: ScissorsIcon,
       color: 'text-[#F7BF24]',
       bgColor: 'bg-[#F7BF24]/10'
     }
   ];
-  // Navigation menu items
+
+  // Navigation menu items with real counts
   const navigationItems = [
     { icon: CalendarDaysIcon, label: 'Dashboard', active: true, path: '/dashboard/admin' },
-    { icon: UsersIcon, label: 'Customers', count: 342, path: '/dashboard/users' },
-    { icon: Users2Icon, label: 'Staff', count: 8, path: '/dashboard/adminstaff' },
-    { icon: CalendarIcon, label: 'Appointments', count: 24, path: '/dashboard/appointments' },
-    { icon: ScissorsIcon, label: 'Services', count: 15, path: '/dashboard/services' },
+    { icon: UsersIcon, label: 'Customers', count: customersData.length, path: '/dashboard/users' },
+    { icon: Users2Icon, label: 'Staff', count: staffData.length, path: '/dashboard/adminstaff' },
+    { icon: CalendarIcon, label: 'Appointments', count: 0, path: '/dashboard/appointments' }, // Connect to appointments API
+    { icon: ScissorsIcon, label: 'Services', count: servicesData.length, path: '/dashboard/services' },
     { icon: BellIcon, label: 'Notifications', count: 5, path: '/dashboard/notifications' },
     { icon: SettingsIcon, label: 'Settings', path: '/dashboard/settings' }
   ];
 
-  // Recent appointments data
+  // Mock appointments data (replace with real API when available)
   const recentAppointments = [
     {
       id: 1,
@@ -109,83 +222,73 @@ const AdminDashboard = () => {
       time: '2:00 PM',
       status: 'pending',
       duration: '120 min'
-    },
-    {
-      id: 4,
-      customer: 'Robert Garcia',
-      service: 'Full Service Package',
-      staff: 'Taylor Morgan',
-      date: '2025-06-26',
-      time: '3:30 PM',
-      status: 'confirmed',
-      duration: '90 min'
     }
   ];
 
-  // Staff availability data
-  const staffStatus = [
-    {
-      id: 1,
-      name: 'Jamie Rodriguez',
-      role: 'Senior Hair Stylist',
-      status: 'available',
+  // Real staff status based on loaded data
+  const getStaffStatusForDashboard = () => {
+    return staffData.slice(0, 4).map(staff => ({
+      id: staff.id,
+      name: staff.name,
+      role: staff.role,
+      status: staff.isActive ? 'available' : 'offline',
       currentAppointment: null,
       nextAppointment: '2:00 PM',
-      avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80'
-    },
-    {
-      id: 2,
-      name: 'Alex Kim',
-      role: 'Master Barber',
-      status: 'busy',
-      currentAppointment: 'Michael Chen - Beard Styling',
-      nextAppointment: '1:00 PM',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80'
-    },
-    {
-      id: 3,
-      name: 'Jordan Smith',
-      role: 'Hair Colorist',
-      status: 'available',
-      currentAppointment: null,
-      nextAppointment: '2:00 PM',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80'
-    },
-    {
-      id: 4,
-      name: 'Taylor Morgan',
-      role: 'Spa Specialist',
-      status: 'break',
-      currentAppointment: null,
-      nextAppointment: '3:30 PM',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80'
-    }
-  ];
+      avatar: `https://images.unsplash.com/photo-1580489944761-15a19d654956?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80`
+    }));
+  };
 
-  // Recent notifications
-  const recentNotifications = [
-    {
-      id: 1,
-      type: 'appointment',
-      message: 'New appointment booked by Sarah Johnson',
-      time: '5 min ago',
-      read: false
-    },
-    {
-      id: 2,
-      type: 'staff',
-      message: 'Alex Kim updated availability',
-      time: '15 min ago',
-      read: false
-    },
-    {
-      id: 3,
-      type: 'service',
-      message: 'New service "Deep Conditioning" added',
-      time: '1 hour ago',
-      read: true
+  // Real notifications based on recent activity
+  const getRecentNotifications = () => {
+    const notifications = [];
+    
+    // Add notifications for recent customers
+    if (customersData.length > 0) {
+      const recentCustomers = customersData
+        .filter(c => new Date(c.registrationDate) > new Date(Date.now() - 24 * 60 * 60 * 1000))
+        .slice(0, 2);
+      
+      recentCustomers.forEach(customer => {
+        notifications.push({
+          id: `customer-${customer.id}`,
+          type: 'customer',
+          message: `New customer ${customer.name} registered`,
+          time: '2 hours ago',
+          read: false
+        });
+      });
     }
-  ];
+
+    // Add notifications for recent services
+    if (servicesData.length > 0) {
+      const recentServices = servicesData.slice(0, 1);
+      recentServices.forEach(service => {
+        notifications.push({
+          id: `service-${service.id}`,
+          type: 'service',
+          message: `Service "${service.name}" is available`,
+          time: '1 hour ago',
+          read: true
+        });
+      });
+    }
+
+    // Add staff notifications
+    if (staffData.length > 0) {
+      const activeStaff = staffData.filter(s => s.isActive).slice(0, 1);
+      activeStaff.forEach(staff => {
+        notifications.push({
+          id: `staff-${staff.id}`,
+          type: 'staff',
+          message: `${staff.name} is available for appointments`,
+          time: '30 min ago',
+          read: false
+        });
+      });
+    }
+
+    return notifications.slice(0, 3);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -210,6 +313,17 @@ const AdminDashboard = () => {
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#212121] flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#F7BF24] mx-auto mb-4"></div>
+          <p className="text-lg">Loading Dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#212121] text-white">
@@ -305,7 +419,7 @@ const AdminDashboard = () => {
               <button className="relative p-2 bg-[#232323] rounded-lg hover:bg-[#2a2a2a] transition-colors">
                 <BellIcon size={20} className="text-gray-300" />
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  5
+                  {getRecentNotifications().filter(n => !n.read).length}
                 </span>
               </button>
               
@@ -349,7 +463,7 @@ const AdminDashboard = () => {
             <div className="lg:col-span-2 bg-[#181818] rounded-xl border border-gray-700">
               <div className="p-6 border-b border-gray-700">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-white">Today's Appointments</h2>
+                  <h2 className="text-xl font-bold text-white">Recent Activity</h2>
                   <div className="flex items-center space-x-3">
                     <button 
                       onClick={() => setSelectedFilter(selectedFilter === 'all' ? 'pending' : 'all')}
@@ -368,30 +482,58 @@ const AdminDashboard = () => {
               </div>
               <div className="p-6">
                 <div className="space-y-4">
-                  {recentAppointments.map((appointment) => (
-                    <div key={appointment.id} className="flex items-center justify-between p-4 bg-[#232323] rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                  {/* Show recent customers */}
+                  {customersData.slice(0, 2).map((customer) => (
+                    <div key={`customer-${customer.id}`} className="flex items-center justify-between p-4 bg-[#232323] rounded-lg hover:bg-[#2a2a2a] transition-colors">
                       <div className="flex items-center space-x-4">
-                        <div className={`w-3 h-3 rounded-full ${getStatusColor(appointment.status)}`}></div>
+                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
                         <div>
-                          <h4 className="font-semibold text-white">{appointment.customer}</h4>
-                          <p className="text-sm text-gray-400">{appointment.service}</p>
-                          <p className="text-xs text-gray-500">{appointment.staff} • {appointment.duration}</p>
+                          <h4 className="font-semibold text-white">{customer.name}</h4>
+                          <p className="text-sm text-gray-400">New Customer Registration</p>
+                          <p className="text-xs text-gray-500">Email: {customer.email}</p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
                         <div className="text-right">
-                          <p className="text-sm font-medium text-white">{appointment.time}</p>
-                          <p className="text-xs text-gray-400 capitalize">{appointment.status}</p>
+                          <p className="text-sm font-medium text-white">
+                            {new Date(customer.registrationDate).toLocaleDateString()}
+                          </p>
+                          <p className="text-xs text-gray-400 capitalize">Active</p>
                         </div>
                         <div className="flex space-x-1">
-                          <button className="p-1 hover:bg-[#3a3a3a] rounded transition-colors">
+                          <button 
+                            onClick={() => navigate(`/dashboard/users`)}
+                            className="p-1 hover:bg-[#3a3a3a] rounded transition-colors"
+                          >
                             <EyeIcon size={16} className="text-gray-400" />
                           </button>
-                          <button className="p-1 hover:bg-[#3a3a3a] rounded transition-colors">
-                            <EditIcon size={16} className="text-gray-400" />
-                          </button>
-                          <button className="p-1 hover:bg-[#3a3a3a] rounded transition-colors">
-                            <MoreVerticalIcon size={16} className="text-gray-400" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Show recent services */}
+                  {servicesData.slice(0, 1).map((service) => (
+                    <div key={`service-${service.id}`} className="flex items-center justify-between p-4 bg-[#232323] rounded-lg hover:bg-[#2a2a2a] transition-colors">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                        <div>
+                          <h4 className="font-semibold text-white">{service.name}</h4>
+                          <p className="text-sm text-gray-400">{service.category}</p>
+                          <p className="text-xs text-gray-500">Rs. {service.price} • {service.duration}min</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-white">Active</p>
+                          <p className="text-xs text-gray-400">Service</p>
+                        </div>
+                        <div className="flex space-x-1">
+                          <button 
+                            onClick={() => navigate(`/dashboard/services`)}
+                            className="p-1 hover:bg-[#3a3a3a] rounded transition-colors"
+                          >
+                            <EyeIcon size={16} className="text-gray-400" />
                           </button>
                         </div>
                       </div>
@@ -407,7 +549,7 @@ const AdminDashboard = () => {
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold text-white">Staff Status</h2>
                   <button 
-                    onClick={() => navigate('/dashboard/staff')}
+                    onClick={() => navigate('/dashboard/adminstaff')}
                     className="text-[#F7BF24] hover:text-yellow-400 text-sm font-medium"
                   >
                     Manage
@@ -416,25 +558,23 @@ const AdminDashboard = () => {
               </div>
               <div className="p-6">
                 <div className="space-y-4">
-                  {staffStatus.map((staff) => (
+                  {getStaffStatusForDashboard().map((staff) => (
                     <div key={staff.id} className="flex items-center space-x-4 p-3 bg-[#232323] rounded-lg hover:bg-[#2a2a2a] transition-colors">
                       <div className="relative">
-                        <img src={staff.avatar} alt={staff.name} className="w-12 h-12 rounded-full object-cover" />
+                        <div className="w-12 h-12 bg-[#F7BF24] rounded-full flex items-center justify-center text-black font-semibold">
+                          {staff.name.charAt(0).toUpperCase()}
+                        </div>
                         <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-[#232323] ${getStaffStatusColor(staff.status)}`}></div>
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="font-semibold text-white truncate">{staff.name}</h4>
                         <p className="text-sm text-gray-400">{staff.role}</p>
-                        {staff.currentAppointment ? (
-                          <p className="text-xs text-blue-400 truncate">{staff.currentAppointment}</p>
-                        ) : (
-                          <p className="text-xs text-gray-500">Next: {staff.nextAppointment}</p>
-                        )}
+                        <p className="text-xs text-gray-500">
+                          {staff.status === 'available' ? 'Ready for appointments' : 'Currently offline'}
+                        </p>
                       </div>
                       <div className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
                         staff.status === 'available' ? 'bg-green-500/20 text-green-400' :
-                        staff.status === 'busy' ? 'bg-red-500/20 text-red-400' :
-                        staff.status === 'break' ? 'bg-yellow-500/20 text-yellow-400' :
                         'bg-gray-500/20 text-gray-400'
                       }`}>
                         {staff.status}
@@ -463,18 +603,18 @@ const AdminDashboard = () => {
               </div>
               <div className="p-6">
                 <div className="space-y-4">
-                  {recentNotifications.map((notification) => (
+                  {getRecentNotifications().map((notification) => (
                     <div key={notification.id} className={`flex items-start space-x-3 p-3 rounded-lg transition-colors ${
                       notification.read ? 'bg-[#232323]' : 'bg-[#F7BF24]/10 border border-[#F7BF24]/20'
                     }`}>
                       <div className={`p-2 rounded-full ${
-                        notification.type === 'appointment' ? 'bg-blue-500/20' :
+                        notification.type === 'customer' ? 'bg-purple-500/20' :
                         notification.type === 'staff' ? 'bg-green-500/20' :
-                        'bg-purple-500/20'
+                        'bg-blue-500/20'
                       }`}>
-                        {notification.type === 'appointment' ? <CalendarIcon size={16} className="text-blue-400" /> :
-                         notification.type === 'staff' ? <UsersIcon size={16} className="text-green-400" /> :
-                         <ScissorsIcon size={16} className="text-purple-400" />}
+                        {notification.type === 'customer' ? <UsersIcon size={16} className="text-purple-400" /> :
+                         notification.type === 'staff' ? <Users2Icon size={16} className="text-green-400" /> :
+                         <ScissorsIcon size={16} className="text-blue-400" />}
                       </div>
                       <div className="flex-1">
                         <p className="text-white text-sm">{notification.message}</p>
@@ -497,32 +637,32 @@ const AdminDashboard = () => {
               <div className="p-6">
                 <div className="grid grid-cols-2 gap-4">
                   <button 
-                    onClick={() => navigate('/dashboard/users/add')}
+                    onClick={() => navigate('/dashboard/users')}
                     className="p-4 bg-[#232323] hover:bg-[#2a2a2a] rounded-lg text-center transition-colors group"
                   >
                     <UsersIcon size={24} className="text-[#F7BF24] mx-auto mb-2 group-hover:scale-110 transition-transform" />
-                    <span className="text-sm font-medium text-white">Add Customer</span>
+                    <span className="text-sm font-medium text-white">Manage Customers</span>
                   </button>
                   <button 
-                    onClick={() => navigate('/dashboard/staff/add')}
+                    onClick={() => navigate('/dashboard/adminstaff')}
                     className="p-4 bg-[#232323] hover:bg-[#2a2a2a] rounded-lg text-center transition-colors group"
                   >
-                    <UserIcon size={24} className="text-[#F7BF24] mx-auto mb-2 group-hover:scale-110 transition-transform" />
-                    <span className="text-sm font-medium text-white">Add Staff</span>
+                    <Users2Icon size={24} className="text-[#F7BF24] mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-sm font-medium text-white">Manage Staff</span>
                   </button>
                   <button 
-                    onClick={() => navigate('/dashboard/appointments/new')}
+                    onClick={() => navigate('/dashboard/appointments')}
                     className="p-4 bg-[#232323] hover:bg-[#2a2a2a] rounded-lg text-center transition-colors group"
                   >
                     <CalendarIcon size={24} className="text-[#F7BF24] mx-auto mb-2 group-hover:scale-110 transition-transform" />
-                    <span className="text-sm font-medium text-white">Book Appointment</span>
+                    <span className="text-sm font-medium text-white">Appointments</span>
                   </button>
                   <button 
-                    onClick={() => navigate('/dashboard/services/add')}
+                    onClick={() => navigate('/dashboard/services')}
                     className="p-4 bg-[#232323] hover:bg-[#2a2a2a] rounded-lg text-center transition-colors group"
                   >
                     <ScissorsIcon size={24} className="text-[#F7BF24] mx-auto mb-2 group-hover:scale-110 transition-transform" />
-                    <span className="text-sm font-medium text-white">Add Service</span>
+                    <span className="text-sm font-medium text-white">Manage Services</span>
                   </button>
                 </div>
               </div>
