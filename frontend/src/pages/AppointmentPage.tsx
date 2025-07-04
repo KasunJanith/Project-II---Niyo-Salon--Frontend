@@ -492,7 +492,7 @@ const AppointmentPage = () => {
 
           {/* Right: Booking Summary */}
           <div className="lg:col-span-1">
-            <div className="bg-[#181818] rounded-xl border border-gray-700 p-6 sticky top-8">
+            <div className="bg-[#181818] rounded-xl border border-gray-700 p-6 sticky top-24">
               <h2 className="text-xl font-bold text-white mb-6 flex items-center">
                 <CreditCardIcon size={24} className="text-[#F7BF24] mr-3" />
                 Booking Summary
