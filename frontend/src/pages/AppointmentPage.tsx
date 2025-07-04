@@ -19,6 +19,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { adminService, ServiceResponse } from "../services/adminService";
 import { bookingService, AppointmentRequest } from "../services/bookingService";
+import useUserData from "../hooks/useUserData";
 
 // Helper function to convert 12-hour time to 24-hour format
 function convertTo24Hour(time12h: string) {
@@ -81,6 +82,7 @@ const availableTimes = [
 ];
 
 const AppointmentPage = () => {
+  const userData = useUserData();
   const [services, setServices] = useState<Service[]>([]);
   const [servicesLoading, setServicesLoading] = useState(true);
   const [selectedServices, setSelectedServices] = useState<number[]>([]);
@@ -126,29 +128,13 @@ const AppointmentPage = () => {
     loadServices();
   }, []);
 
-  // Fetch logged-in user info on mount
+  // Pre-fill customer data if user is logged in
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      fetch("http://localhost:8080/api/auth/me", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-        .then((res) => {
-          if (!res.ok) throw new Error("Unauthorized");
-          return res.json();
-        })
-        .then((user) => {
-          setCustomerName(user.username || "");
-          setCustomerPhone(user.phoneNumber || "");
-        })
-        .catch(() => {
-          setCustomerName("");
-          setCustomerPhone("");
-        });
+    if (userData && userData.id > 0) {
+      setCustomerName(userData.username || "");
+      setCustomerPhone(userData.phoneNumber || "");
     }
-  }, []);
+  }, [userData]);
 
   // Calculate subtotal based on selected services
   const subtotal = selectedServices.reduce(
@@ -180,6 +166,7 @@ const AppointmentPage = () => {
       date: selectedDate.toISOString().split("T")[0], // "YYYY-MM-DD"
       time: convertTo24Hour(selectedTime), // convert to 24-hour format
       notes,
+      userId: userData && userData.id > 0 ? userData.id : undefined, // Include user ID if logged in
     };
 
     setLoading(true);
