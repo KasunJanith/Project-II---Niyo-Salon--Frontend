@@ -11,45 +11,78 @@ const AddStaffPage = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setIsSubmitting(true);
 
     try {
-    const response = await axios.post(
-        'http://localhost:8080/api/admin/add-staff',
+      // First, register the user account
+      const registerResponse = await axios.post(
+        'http://localhost:8080/api/auth/register',
         {
-          name,
+          username: name,
           phoneNumber,
           password,
           role: 'staff',
         },
         {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': "Bearer " + localStorage.getItem('token')
-        },
+          headers: {
+            'Content-Type': 'application/json',
+          },
         }
-    );
+      );
 
-    if (response.status === 200 || response.status === 201) {
-        setSuccess('Staff member added successfully!');
-        setTimeout(() => navigate('/dashboard/admin'), 1200);
-    } else {
-        setError('Failed to add staff member.');
-    }
-    } 
-    catch (err: any) {
-    if (err.response && err.response.data && err.response.data.message) {
-        setError(err.response.data.message);
-    } else {
-        setError('Network error.');
-    }
-    }
+      if (registerResponse.status === 200 || registerResponse.status === 201) {
+        // If registration is successful, add to staff table
+        try {
+          const staffResponse = await axios.post(
+            'http://localhost:8080/api/admin/add-staff',
+            {
+              name,
+              phoneNumber,
+              password,
+              role: 'staff',
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': "Bearer " + localStorage.getItem('token')
+              },
+            }
+          );
 
+          if (staffResponse.status === 200 || staffResponse.status === 201) {
+            setSuccess('Staff member added successfully!');
+            setTimeout(() => navigate('/dashboard/admin'), 1200);
+          } else {
+            setError('Staff account created but failed to add to staff table.');
+          }
+        } catch (staffError: any) {
+          console.error('Staff table error:', staffError);
+          if (staffError.response && staffError.response.data && staffError.response.data.message) {
+            setError(`Account created but staff table error: ${staffError.response.data.message}`);
+          } else {
+            setError('Account created but failed to add to staff table.');
+          }
+        }
+      } else {
+        setError('Failed to create staff account.');
+      }
+    } catch (registerError: any) {
+      console.error('Registration error:', registerError);
+      if (registerError.response && registerError.response.data && registerError.response.data.message) {
+        setError(registerError.response.data.message);
+      } else {
+        setError('Network error during registration.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -72,6 +105,7 @@ const AddStaffPage = () => {
                     value={name}
                     onChange={e => setName(e.target.value)}
                     required
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
@@ -86,6 +120,7 @@ const AddStaffPage = () => {
                     value={phoneNumber}
                     onChange={e => setPhoneNumber(e.target.value)}
                     required
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
@@ -100,14 +135,16 @@ const AddStaffPage = () => {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     required
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
               <button
                 type="submit"
-                className="w-full bg-purple-700 text-white py-2 px-4 rounded-md hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 font-medium"
+                disabled={isSubmitting}
+                className="w-full bg-purple-700 text-white py-2 px-4 rounded-md hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Add Staff Member
+                {isSubmitting ? 'Adding Staff Member...' : 'Add Staff Member'}
               </button>
             </form>
           </div>
