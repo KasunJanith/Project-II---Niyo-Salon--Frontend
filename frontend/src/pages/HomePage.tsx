@@ -170,13 +170,7 @@ const HomePage = () => {
               className="relative w-full flex justify-center items-center"
               style={{ height: 150 }}
             >
-              {/* EST. */}
-              <span
-                className=" text-yellow-400 font-bold text-xl md:text-2xl"
-                style={{ bottom: 0, left: "2rem" }}
-              >
-                EST.
-              </span>
+              
               {/* Chevron SVG */}
               <img
                 src={down}
@@ -185,13 +179,7 @@ const HomePage = () => {
                 style={{ display: "block" }}
               />
 
-              {/* 2024 */}
-              <span
-                className=" right-0 text-yellow-400 font-bold text-xl md:text-2xl"
-                style={{ bottom: 0, right: "2rem" }}
-              >
-                2024
-              </span>
+              
             </div>
           </div>
 

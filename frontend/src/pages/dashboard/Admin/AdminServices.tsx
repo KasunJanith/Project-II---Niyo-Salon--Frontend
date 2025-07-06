@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   PlusIcon,
   SearchIcon,
@@ -17,124 +17,23 @@ import {
   UserIcon,
   FilterIcon,
   MoreVerticalIcon,
-  SaveIcon
+  SaveIcon,
+  AlertCircleIcon,
+  LoaderIcon
 } from 'lucide-react';
+import { adminService, ServiceRequest, ServiceResponse } from '../../../services/adminService';
 
-// Service interface
-interface Service {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  price: number;
-  duration: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+// Service interface extending the API response
+interface Service extends ServiceResponse {
   popularityRank?: number;
   staffAssigned?: string[];
   requirements?: string[];
-  imageUrl?: string;
 }
 
-// Sample services data
-const initialServices: Service[] = [
-  {
-    id: 'srv-1',
-    name: 'Premium Haircut & Style',
-    description: 'Professional haircut with consultation, wash, cut, and styling',
-    category: 'Hair',
-    price: 85,
-    duration: 60,
-    isActive: true,
-    createdAt: '2024-01-15',
-    updatedAt: '2024-06-20',
-    popularityRank: 1,
-    staffAssigned: ['staff-1', 'staff-2'],
-    requirements: ['Hair consultation', 'Shampoo & conditioning'],
-    imageUrl: '/api/placeholder/300/200'
-  },
-  {
-    id: 'srv-2',
-    name: 'Beard Trim & Styling',
-    description: 'Professional beard trimming and styling with hot towel treatment',
-    category: 'Hair',
-    price: 45,
-    duration: 30,
-    isActive: true,
-    createdAt: '2024-01-20',
-    updatedAt: '2024-06-18',
-    popularityRank: 3,
-    staffAssigned: ['staff-1', 'staff-3'],
-    requirements: ['Beard assessment'],
-    imageUrl: '/api/placeholder/300/200'
-  },
-  {
-    id: 'srv-3',
-    name: 'Manicure & Nail Art',
-    description: 'Complete nail care with polish and optional nail art design',
-    category: 'Nails',
-    price: 65,
-    duration: 45,
-    isActive: true,
-    createdAt: '2024-02-01',
-    updatedAt: '2024-06-15',
-    popularityRank: 2,
-    staffAssigned: ['staff-4', 'staff-5'],
-    requirements: ['Nail health assessment'],
-    imageUrl: '/api/placeholder/300/200'
-  },
-  {
-    id: 'srv-4',
-    name: 'Relaxation Massage',
-    description: 'Full body relaxation massage with aromatherapy oils',
-    category: 'Spa',
-    price: 120,
-    duration: 90,
-    isActive: true,
-    createdAt: '2024-02-10',
-    updatedAt: '2024-06-10',
-    popularityRank: 4,
-    staffAssigned: ['staff-6'],
-    requirements: ['Health questionnaire', 'Allergy check'],
-    imageUrl: '/api/placeholder/300/200'
-  },
-  {
-    id: 'srv-5',
-    name: 'Hair Coloring',
-    description: 'Professional hair coloring with premium products',
-    category: 'Hair',
-    price: 150,
-    duration: 120,
-    isActive: false,
-    createdAt: '2024-03-01',
-    updatedAt: '2024-06-01',
-    popularityRank: 5,
-    staffAssigned: ['staff-2'],
-    requirements: ['Strand test', 'Color consultation'],
-    imageUrl: '/api/placeholder/300/200'
-  },
-  {
-    id: 'srv-6',
-    name: 'Facial Treatment',
-    description: 'Deep cleansing facial with moisturizing and anti-aging treatment',
-    category: 'Spa',
-    price: 95,
-    duration: 75,
-    isActive: true,
-    createdAt: '2024-03-15',
-    updatedAt: '2024-06-05',
-    popularityRank: 6,
-    staffAssigned: ['staff-6', 'staff-7'],
-    requirements: ['Skin analysis'],
-    imageUrl: '/api/placeholder/300/200'
-  }
-];
-
-const serviceCategories = ['All', 'Hair', 'Nails', 'Spa', 'Massage'];
+const serviceCategories = ['All', 'Hair Services', 'Barber Services', 'Tattoo Services'];
 
 function AdminServices() {
-  const [services, setServices] = useState<Service[]>(initialServices);
+  const [services, setServices] = useState<Service[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -144,18 +43,53 @@ function AdminServices() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Form state for add/edit service
   const [serviceForm, setServiceForm] = useState({
     name: '',
     description: '',
-    category: 'Hair',
+    category: 'Hair Services',
     price: 0,
     duration: 30,
     isActive: true,
     requirements: [''],
     staffAssigned: [] as string[]
   });
+
+  // Load services on component mount
+  useEffect(() => {
+    // Add connection test before loading services
+    const testAndLoadServices = async () => {
+      console.log('Testing backend connection...');
+      const isConnected = await adminService.testConnection();
+      console.log('Backend connection test result:', isConnected);
+      
+      if (!isConnected) {
+        setError('Cannot connect to backend server. Please ensure the backend is running on http://localhost:8080');
+        return;
+      }
+      
+      loadServices();
+    };
+
+    testAndLoadServices();
+  }, []);
+
+  const loadServices = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const servicesData = await adminService.getAllServices();
+      setServices(servicesData);
+    } catch (err) {
+      setError('Failed to load services. Please try again.');
+      console.error('Error loading services:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter services
   const filteredServices = services.filter(service => {
@@ -179,73 +113,114 @@ function AdminServices() {
   };
 
   // Handle service actions
-  const handleAddService = () => {
-    const newService: Service = {
-      id: `srv-${Date.now()}`,
-      name: serviceForm.name,
-      description: serviceForm.description,
-      category: serviceForm.category,
-      price: serviceForm.price,
-      duration: serviceForm.duration,
-      isActive: serviceForm.isActive,
-      createdAt: new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString().split('T')[0],
-      requirements: serviceForm.requirements.filter(req => req.trim() !== ''),
-      staffAssigned: serviceForm.staffAssigned,
-      imageUrl: '/api/placeholder/300/200'
-    };
+  const handleAddService = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const serviceRequest: ServiceRequest = {
+        name: serviceForm.name,
+        description: serviceForm.description,
+        category: serviceForm.category,
+        price: serviceForm.price,
+        duration: serviceForm.duration,
+        isActive: serviceForm.isActive
+      };
 
-    setServices(prev => [...prev, newService]);
-    setShowAddModal(false);
-    resetForm();
+      const newService = await adminService.createService(serviceRequest);
+      setServices(prev => [...prev, newService]);
+      setShowAddModal(false);
+      resetForm();
+    } catch (err) {
+      setError('Failed to add service. Please try again.');
+      console.error('Error adding service:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleEditService = () => {
+  const handleEditService = async () => {
     if (!selectedService) return;
 
-    setServices(prev => prev.map(service => 
-      service.id === selectedService.id 
-        ? {
-            ...service,
-            name: serviceForm.name,
-            description: serviceForm.description,
-            category: serviceForm.category,
-            price: serviceForm.price,
-            duration: serviceForm.duration,
-            isActive: serviceForm.isActive,
-            updatedAt: new Date().toISOString().split('T')[0],
-            requirements: serviceForm.requirements.filter(req => req.trim() !== ''),
-            staffAssigned: serviceForm.staffAssigned
-          }
-        : service
-    ));
-    
-    setShowEditModal(false);
-    setSelectedService(null);
-    resetForm();
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const serviceRequest: ServiceRequest = {
+        name: serviceForm.name,
+        description: serviceForm.description,
+        category: serviceForm.category,
+        price: serviceForm.price,
+        duration: serviceForm.duration,
+        isActive: serviceForm.isActive
+      };
+
+      const updatedService = await adminService.updateService(selectedService.id, serviceRequest);
+      setServices(prev => prev.map(service => 
+        service.id === selectedService.id ? updatedService : service
+      ));
+      
+      setShowEditModal(false);
+      setSelectedService(null);
+      resetForm();
+    } catch (err) {
+      setError('Failed to update service. Please try again.');
+      console.error('Error updating service:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteService = () => {
+  const handleDeleteService = async () => {
     if (!selectedService) return;
     
-    setServices(prev => prev.filter(service => service.id !== selectedService.id));
-    setShowDeleteModal(false);
-    setSelectedService(null);
+    try {
+      setLoading(true);
+      setError(null);
+      
+      await adminService.deleteService(selectedService.id);
+      setServices(prev => prev.filter(service => service.id !== selectedService.id));
+      setShowDeleteModal(false);
+      setSelectedService(null);
+    } catch (err) {
+      setError('Failed to delete service. Please try again.');
+      console.error('Error deleting service:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleToggleStatus = (serviceId: string) => {
-    setServices(prev => prev.map(service => 
-      service.id === serviceId 
-        ? { ...service, isActive: !service.isActive, updatedAt: new Date().toISOString().split('T')[0] }
-        : service
-    ));
+  const handleToggleStatus = async (serviceId: number) => {
+    const service = services.find(s => s.id === serviceId);
+    if (!service) return;
+
+    try {
+      setError(null);
+      
+      const serviceRequest: ServiceRequest = {
+        name: service.name,
+        description: service.description,
+        category: service.category,
+        price: service.price,
+        duration: service.duration,
+        isActive: !service.isActive
+      };
+
+      const updatedService = await adminService.updateService(serviceId, serviceRequest);
+      setServices(prev => prev.map(s => 
+        s.id === serviceId ? updatedService : s
+      ));
+    } catch (err) {
+      setError('Failed to update service status. Please try again.');
+      console.error('Error toggling service status:', err);
+    }
   };
 
   const resetForm = () => {
     setServiceForm({
       name: '',
       description: '',
-      category: 'Hair',
+      category: 'Hair Services',
       price: 0,
       duration: 30,
       isActive: true,
@@ -281,20 +256,18 @@ function AdminServices() {
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case 'Hair': return ScissorsIcon;
-      case 'Nails': return SparklesIcon;
-      case 'Spa': return UserIcon;
-      case 'Massage': return UserIcon;
+      case 'Hair Services': return ScissorsIcon;
+      case 'Barber Services': return SparklesIcon;
+      case 'Tattoo Services': return UserIcon;
       default: return TagIcon;
     }
   };
 
   const getCategoryColor = (category: string) => {
     switch (category) {
-      case 'Hair': return 'text-blue-400 bg-blue-500/10';
-      case 'Nails': return 'text-pink-400 bg-pink-500/10';
-      case 'Spa': return 'text-green-400 bg-green-500/10';
-      case 'Massage': return 'text-purple-400 bg-purple-500/10';
+      case 'Hair Services': return 'text-blue-400 bg-blue-500/10';
+      case 'Barber Services': return 'text-green-400 bg-green-500/10';
+      case 'Tattoo Services': return 'text-purple-400 bg-purple-500/10';
       default: return 'text-gray-400 bg-gray-500/10';
     }
   };
@@ -302,6 +275,30 @@ function AdminServices() {
   return (
     <div className="min-h-screen bg-[#212121] text-white p-6">
       <div className="max-w-7xl mx-auto">
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
+            <AlertCircleIcon className="h-5 w-5 text-red-400 flex-shrink-0" />
+            <p className="text-red-400">{error}</p>
+            <button 
+              onClick={() => setError(null)}
+              className="ml-auto text-red-400 hover:text-red-300"
+            >
+              <XIcon className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-[#181818] p-6 rounded-xl border border-gray-700 flex items-center gap-3">
+              <LoaderIcon className="h-5 w-5 text-[#F7BF24] animate-spin" />
+              <span className="text-white">Processing...</span>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
@@ -377,7 +374,7 @@ function AdminServices() {
                   <DollarSignIcon className="h-6 w-6 text-[#F7BF24]" />
                 </div>
               </div>
-              <h3 className="text-2xl font-bold text-white mb-1">${stats.totalRevenue}</h3>
+              <h3 className="text-2xl font-bold text-white mb-1">Rs.{stats.totalRevenue}</h3>
               <p className="text-gray-400 font-medium">Total Value</p>
             </div>
           </div>
@@ -431,20 +428,19 @@ function AdminServices() {
               const CategoryIcon = getCategoryIcon(service.category);
               return (
                 <div key={service.id} className="bg-[#181818] rounded-xl border border-gray-700 hover:border-[#F7BF24] transition-all duration-300 overflow-hidden group">
-                  {/* Service Image */}
-                  <div className="relative h-48 bg-[#232323] overflow-hidden">
-                    <img 
-                      src={service.imageUrl} 
-                      alt={service.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-4 left-4">
-                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${getCategoryColor(service.category)}`}>
-                        <CategoryIcon className="h-3 w-3 inline mr-1" />
-                        {service.category}
+                  {/* Service Header */}
+                  <div className="relative p-6 bg-[#232323]/50 border-b border-gray-700">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-3 rounded-lg transition-colors ${getCategoryColor(service.category)}`}>
+                          <CategoryIcon className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <div className={`px-3 py-1 rounded-full text-xs font-medium ${getCategoryColor(service.category)}`}>
+                            {service.category}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="absolute top-4 right-4">
                       <button
                         onClick={() => handleToggleStatus(service.id)}
                         className={`p-2 rounded-full transition-colors ${
@@ -482,7 +478,7 @@ function AdminServices() {
                       <div className="flex items-center gap-4">
                         <div className="flex items-center gap-1 text-[#F7BF24]">
                           <DollarSignIcon className="h-4 w-4" />
-                          <span className="font-bold">${service.price}</span>
+                          <span className="font-bold">Rs.{service.price}</span>
                         </div>
                         <div className="flex items-center gap-1 text-gray-400">
                           <ClockIcon className="h-4 w-4" />
@@ -548,11 +544,9 @@ function AdminServices() {
                       <tr key={service.id} className="hover:bg-[#232323] transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <img
-                              src={service.imageUrl}
-                              alt={service.name}
-                              className="w-12 h-12 rounded-lg bg-gray-600 object-cover"
-                            />
+                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${getCategoryColor(service.category)}`}>
+                              <CategoryIcon className="h-6 w-6" />
+                            </div>
                             <div>
                               <p className="font-medium text-white">{service.name}</p>
                               <p className="text-sm text-gray-400 line-clamp-1">{service.description}</p>
@@ -566,7 +560,7 @@ function AdminServices() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-[#F7BF24] font-bold">${service.price}</span>
+                          <span className="text-[#F7BF24] font-bold">Rs.{service.price}</span>
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-gray-300">{service.duration} min</span>
@@ -594,7 +588,9 @@ function AdminServices() {
                           </button>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm text-gray-400">{new Date(service.updatedAt).toLocaleDateString()}</span>
+                          <span className="text-sm text-gray-400">
+                            {service.updatedAt ? new Date(service.updatedAt).toLocaleDateString() : 'N/A'}
+                          </span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
@@ -684,7 +680,7 @@ function AdminServices() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Price ($) *</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Price (Rs.) *</label>
                   <input
                     type="number"
                     min="0"
@@ -850,7 +846,7 @@ function AdminServices() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Price ($) *</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Price (Rs.) *</label>
                   <input
                     type="number"
                     min="0"
@@ -977,20 +973,24 @@ function AdminServices() {
               </div>
 
               <div className="space-y-6">
-                {/* Service Image */}
-                <div className="relative h-48 bg-[#232323] rounded-lg overflow-hidden">
-                  <img 
-                    src={selectedService.imageUrl} 
-                    alt={selectedService.name}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-4 left-4">
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${getCategoryColor(selectedService.category)}`}>
-                      {selectedService.category}
+                {/* Service Header */}
+                <div className="relative p-6 bg-[#232323] rounded-lg border border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-4 rounded-lg ${getCategoryColor(selectedService.category)}`}>
+                        {(() => {
+                          const CategoryIcon = getCategoryIcon(selectedService.category);
+                          return <CategoryIcon className="h-8 w-8" />;
+                        })()}
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-white mb-1">{selectedService.name}</h3>
+                        <div className={`px-3 py-1 rounded-full text-sm font-medium ${getCategoryColor(selectedService.category)}`}>
+                          {selectedService.category}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="absolute top-4 right-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    <span className={`px-4 py-2 rounded-full text-sm font-medium ${
                       selectedService.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                     }`}>
                       {selectedService.isActive ? 'Active' : 'Inactive'}
@@ -1012,7 +1012,7 @@ function AdminServices() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Price</p>
-                      <p className="text-[#F7BF24] font-bold">${selectedService.price}</p>
+                      <p className="text-[#F7BF24] font-bold">Rs.{selectedService.price}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Duration</p>
@@ -1043,11 +1043,15 @@ function AdminServices() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-400">Created</p>
-                      <p className="text-white">{new Date(selectedService.createdAt).toLocaleDateString()}</p>
+                      <p className="text-white">
+                        {selectedService.createdAt ? new Date(selectedService.createdAt).toLocaleDateString() : 'N/A'}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Last Updated</p>
-                      <p className="text-white">{new Date(selectedService.updatedAt).toLocaleDateString()}</p>
+                      <p className="text-white">
+                        {selectedService.updatedAt ? new Date(selectedService.updatedAt).toLocaleDateString() : 'N/A'}
+                      </p>
                     </div>
                     {selectedService.popularityRank && (
                       <div>

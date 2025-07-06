@@ -1,4 +1,5 @@
-// Shared appointment service for managing appointments across customer and admin interfaces
+// Service for handling appointment and service API calls
+// const API_BASE_URL = 'http://localhost:8080/api'; // Adjust port as needed (currently using mock data)
 
 export interface AppointmentBooking {
   id?: string;
@@ -7,6 +8,7 @@ export interface AppointmentBooking {
   customerPhone: string;
   customerId?: string;
   service: string;
+  serviceId?: string;
   serviceCategory?: string;
   serviceDuration?: string;
   servicePrice?: number;
@@ -15,7 +17,7 @@ export interface AppointmentBooking {
   date: string; // YYYY-MM-DD format
   time: string; // HH:MM format (24-hour)
   endTime?: string;
-  status?: 'pending' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'rescheduled';
+  status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
   notes?: string;
   priority?: 'low' | 'medium' | 'high';
   bookedBy: 'customer' | 'admin' | 'staff'; // Track who created the appointment
@@ -25,12 +27,38 @@ export interface AppointmentBooking {
 }
 
 export interface Service {
-  id: number;
+  id: string;
   name: string;
   category: string;
   price: number;
   duration: number; // in minutes
   description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Backend API interfaces
+export interface AppointmentRequest {
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  serviceId: string;
+  appointmentDateTime: string; // ISO 8601 format
+  notes?: string;
+}
+
+export interface AppointmentResponse {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  service: Service;
+  appointmentDateTime: string;
+  status: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface StaffMember {
@@ -48,20 +76,20 @@ export interface Customer {
   name: string;
   email: string;
   phone: string;
-  isActive: boolean;
+  isActive?: boolean;
 }
 
 // Service data
 export const services: Service[] = [
-  { id: 1, name: 'Haircut', category: 'Hair', price: 50, duration: 60, description: 'Professional haircut and styling' },
-  { id: 2, name: 'Tattoo', category: 'Tattoo', price: 120, duration: 180, description: 'Custom tattoo design and application' },
-  { id: 3, name: 'Piercing', category: 'Piercing', price: 40, duration: 30, description: 'Professional body piercing' },
-  { id: 4, name: 'Spa', category: 'Spa', price: 80, duration: 90, description: 'Relaxing spa treatment' },
-  { id: 5, name: 'Premium Haircut & Styling', category: 'Hair', price: 85, duration: 90, description: 'Premium cut with advanced styling' },
-  { id: 6, name: 'Hair Coloring & Highlights', category: 'Hair', price: 125, duration: 150, description: 'Professional hair coloring service' },
-  { id: 7, name: 'Beard Styling & Trim', category: 'Hair', price: 35, duration: 45, description: 'Beard trimming and styling' },
-  { id: 8, name: 'Full Spa Package', category: 'Spa', price: 150, duration: 120, description: 'Complete spa relaxation package' },
-  { id: 9, name: 'Manicure & Pedicure', category: 'Nails', price: 65, duration: 75, description: 'Hand and foot care service' }
+  { id: '1', name: 'Haircut', category: 'Hair', price: 50, duration: 60, description: 'Professional haircut and styling', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: '2', name: 'Tattoo', category: 'Tattoo', price: 120, duration: 180, description: 'Custom tattoo design and application', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: '3', name: 'Piercing', category: 'Piercing', price: 40, duration: 30, description: 'Professional body piercing', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: '4', name: 'Spa', category: 'Spa', price: 80, duration: 90, description: 'Relaxing spa treatment', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: '5', name: 'Premium Haircut & Styling', category: 'Hair', price: 85, duration: 90, description: 'Premium cut with advanced styling', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: '6', name: 'Hair Coloring & Highlights', category: 'Hair', price: 125, duration: 150, description: 'Professional hair coloring service', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: '7', name: 'Beard Styling & Trim', category: 'Hair', price: 35, duration: 45, description: 'Beard trimming and styling', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: '8', name: 'Full Spa Package', category: 'Spa', price: 150, duration: 120, description: 'Complete spa relaxation package', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: '9', name: 'Manicure & Pedicure', category: 'Nails', price: 65, duration: 75, description: 'Hand and foot care service', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' }
 ];
 
 // Staff data
@@ -130,7 +158,7 @@ export const calculateEndTime = (startTime: string, durationMinutes: number): st
   return `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`;
 };
 
-export const getServiceById = (serviceId: number): Service | undefined => {
+export const getServiceById = (serviceId: string): Service | undefined => {
   return services.find(service => service.id === serviceId);
 };
 
@@ -184,7 +212,7 @@ class AppointmentStorage {
         date: '2025-06-27',
         time: '10:00',
         endTime: '11:30',
-        status: 'confirmed',
+        status: 'CONFIRMED',
         notes: 'Customer prefers layers',
         priority: 'medium',
         bookedBy: 'customer',
@@ -207,7 +235,7 @@ class AppointmentStorage {
         date: '2025-06-27',
         time: '11:30',
         endTime: '12:15',
-        status: 'in-progress',
+        status: 'CONFIRMED',
         notes: 'Regular customer',
         priority: 'low',
         bookedBy: 'admin',
@@ -230,7 +258,7 @@ class AppointmentStorage {
         date: '2025-06-27',
         time: '14:00',
         endTime: '16:30',
-        status: 'pending',
+        status: 'PENDING',
         notes: 'First time customer - booked online',
         priority: 'high',
         bookedBy: 'customer',
@@ -253,7 +281,7 @@ class AppointmentStorage {
         date: '2025-06-28',
         time: '15:30',
         endTime: '17:30',
-        status: 'confirmed',
+        status: 'CONFIRMED',
         notes: 'Anniversary special - staff booked for customer',
         priority: 'high',
         bookedBy: 'staff',
@@ -276,7 +304,7 @@ class AppointmentStorage {
         date: '2025-06-29',
         time: '09:00',
         endTime: '10:15',
-        status: 'confirmed',
+        status: 'CONFIRMED',
         notes: 'Customer self-booked online',
         priority: 'medium',
         bookedBy: 'customer',
@@ -298,7 +326,7 @@ class AppointmentStorage {
       id: generateAppointmentId(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      status: appointment.status || 'pending'
+      status: appointment.status || 'PENDING'
     };
     appointments.push(newAppointment);
     this.save(appointments);
@@ -369,7 +397,7 @@ export const appointmentService = {
   cancelAppointment: async (id: string, reason?: string): Promise<boolean> => {
     // In real app, this would be an API call
     const updated = AppointmentStorage.update(id, { 
-      status: 'cancelled', 
+      status: 'CANCELLED', 
       notes: reason ? `Cancelled: ${reason}` : 'Cancelled'
     });
     return updated !== null;
@@ -396,13 +424,13 @@ export const appointmentService = {
       return !dayAppointments.some(apt => 
         apt.staffId === staffId && 
         apt.time === time && 
-        apt.status !== 'cancelled'
+        apt.status !== 'CANCELLED'
       );
     } else {
       // Check general availability (any staff can handle)
       return dayAppointments.filter(apt => 
         apt.time === time && 
-        apt.status !== 'cancelled'
+        apt.status !== 'CANCELLED'
       ).length < staffMembers.length;
     }
   }
