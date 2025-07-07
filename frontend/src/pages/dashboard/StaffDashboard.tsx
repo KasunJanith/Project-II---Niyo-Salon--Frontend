@@ -1,233 +1,291 @@
 import React, { useState } from 'react';
-import { CalendarIcon, ClockIcon, UserIcon, CheckIcon, XIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  UserIcon, 
+  CalendarIcon, 
+  ClockIcon, 
+  CheckCircleIcon,
+  XCircleIcon,
+  BellIcon,
+  MenuIcon,
+  XIcon,
+  LogOutIcon,
+  Users2Icon,
+  ScissorsIcon,
+  ToggleLeftIcon,
+  ToggleRightIcon,
+  SettingsIcon
+} from 'lucide-react';
+import logo from '../../assets/Niyo Logo.jpg';
+import useUserData from '../../hooks/useUserData';
+
 const StaffDashboard = () => {
-  const [date, setDate] = useState(new Date());
-  // Mock data for today's appointments
-  const todaysAppointments = [{
-    id: 1,
-    clientName: 'Sarah Johnson',
-    service: 'Haircut & Styling',
-    time: '10:00 AM',
-    duration: '45 min',
-    status: 'upcoming'
-  }, {
-    id: 2,
-    clientName: 'Michael Chen',
-    service: 'Beard Trim',
-    time: '11:00 AM',
-    duration: '30 min',
-    status: 'upcoming'
-  }, {
-    id: 3,
-    clientName: 'Jessica Williams',
-    service: 'Hair Coloring',
-    time: '12:00 PM',
-    duration: '90 min',
-    status: 'upcoming'
-  }, {
-    id: 4,
-    clientName: 'Robert Garcia',
-    service: 'Custom Tattoo Consultation',
-    time: '2:30 PM',
-    duration: '60 min',
-    status: 'upcoming'
-  }];
-  return <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Staff Dashboard</h1>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex items-center mb-4">
-            <div className="bg-purple-100 p-3 rounded-full mr-4">
-              <CalendarIcon size={24} className="text-purple-700" />
+  const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(true);
+  const [showAvailabilitySettings, setShowAvailabilitySettings] = useState(false);
+  const user = useUserData();
+
+  // Simple appointments data
+  const todaysAppointments = [
+    {
+      id: 1,
+      clientName: 'Sarah Johnson',
+      service: 'Haircut',
+      time: '10:00 AM',
+      status: 'upcoming'
+    },
+    {
+      id: 2,
+      clientName: 'Michael Chen',
+      service: 'Beard Trim',
+      time: '11:00 AM',
+      status: 'in-progress'
+    }
+  ];
+
+  // Simple metrics
+  const keyMetrics = [
+    { title: 'Today\'s Appointments', value: 3, icon: CalendarIcon, color: 'text-blue-400' },
+    { title: 'Active Clients', value: 12, icon: Users2Icon, color: 'text-green-400' },
+    { title: 'Services Today', value: 8, icon: ScissorsIcon, color: 'text-purple-400' },
+    { title: 'Working Hours', value: '8h', icon: ClockIcon, color: 'text-[#F7BF24]' }
+  ];
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
+
+  const toggleAvailability = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/staff/availability', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          available: !isAvailable,
+          staffId: user.id 
+        })
+      });
+
+      if (response.ok) {
+        setIsAvailable(!isAvailable);
+        alert(`You are now ${!isAvailable ? 'Available' : 'Unavailable'} for appointments`);
+      } else {
+        alert('Failed to update availability');
+      }
+    } catch (error) {
+      console.error('Error updating availability:', error);
+      alert('Error updating availability');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#212121] text-white">
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-50 transition-all duration-300 ${
+        sidebarCollapsed ? 'w-16' : 'w-64'
+      } bg-[#181818] border-r border-gray-700`}>
+        
+        {/* Logo */}
+        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-700">
+          {!sidebarCollapsed && (
+            <div className="flex items-center">
+              <img src={logo} alt="Niyo Salon" className="h-8 w-8 rounded-full mr-3" />
+              <h1 className="text-lg font-bold text-[#F7BF24]">NIYO STAFF</h1>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Today</h3>
-              <p className="text-2xl font-bold text-purple-700">
-                {todaysAppointments.length}
-              </p>
-            </div>
-          </div>
-          <p className="text-gray-600">Appointments scheduled</p>
+          )}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-2 rounded-lg hover:bg-[#232323] transition-colors"
+          >
+            {sidebarCollapsed ? <MenuIcon size={20} /> : <XIcon size={20} />}
+          </button>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex items-center mb-4">
-            <div className="bg-purple-100 p-3 rounded-full mr-4">
-              <ClockIcon size={24} className="text-purple-700" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">This Week</h3>
-              <p className="text-2xl font-bold text-purple-700">18</p>
-            </div>
-          </div>
-          <p className="text-gray-600">Total appointments</p>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex items-center mb-4">
-            <div className="bg-purple-100 p-3 rounded-full mr-4">
-              <UserIcon size={24} className="text-purple-700" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Clients</h3>
-              <p className="text-2xl font-bold text-purple-700">42</p>
-            </div>
-          </div>
-          <p className="text-gray-600">Active clients</p>
-        </div>
-      </div>
-      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
-        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-900">
-            Today's Schedule
-          </h2>
-          <div className="flex items-center">
-            <span className="text-gray-600 mr-2">June 15, 2023</span>
-            <button className="bg-purple-100 text-purple-700 p-2 rounded-md hover:bg-purple-200">
-              <CalendarIcon size={18} />
-            </button>
-          </div>
-        </div>
-        {todaysAppointments.length > 0 ? <div className="divide-y divide-gray-200">
-            {todaysAppointments.map(appointment => <div key={appointment.id} className="p-6">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center mb-1">
-                      <h3 className="text-lg font-semibold text-gray-900 mr-2">
-                        {appointment.clientName}
-                      </h3>
-                      <span className="text-sm text-gray-500">
-                        #{appointment.id}
-                      </span>
-                    </div>
-                    <p className="text-gray-600 mb-2">{appointment.service}</p>
-                    <div className="flex items-center text-gray-500">
-                      <ClockIcon size={16} className="mr-1" />
-                      <span className="mr-3">{appointment.time}</span>
-                      <span>({appointment.duration})</span>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button className="bg-green-100 text-green-700 p-2 rounded-md hover:bg-green-200">
-                      <CheckIcon size={18} />
-                    </button>
-                    <button className="bg-red-100 text-red-700 p-2 rounded-md hover:bg-red-200">
-                      <XIcon size={18} />
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-4 flex space-x-3">
-                  <button className="text-sm text-purple-700 hover:text-purple-900 font-medium">
-                    Client Details
-                  </button>
-                  <button className="text-sm text-purple-700 hover:text-purple-900 font-medium">
-                    View Notes
-                  </button>
-                  <button className="text-sm text-purple-700 hover:text-purple-900 font-medium">
-                    Reschedule
-                  </button>
-                </div>
-              </div>)}
-          </div> : <div className="p-6 text-center">
-            <p className="text-gray-500">No appointments scheduled for today</p>
-          </div>}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">
-              Availability
-            </h2>
-          </div>
-          <div className="p-6">
-            <div className="mb-4">
-              <h3 className="font-medium text-gray-700 mb-2">
-                Your Working Hours
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Monday</span>
-                    <span className="text-gray-900">9:00 AM - 6:00 PM</span>
-                  </div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Tuesday</span>
-                    <span className="text-gray-900">9:00 AM - 6:00 PM</span>
-                  </div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Wednesday</span>
-                    <span className="text-gray-900">9:00 AM - 6:00 PM</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Thursday</span>
-                    <span className="text-gray-900">9:00 AM - 6:00 PM</span>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Friday</span>
-                    <span className="text-gray-900">9:00 AM - 6:00 PM</span>
-                  </div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Saturday</span>
-                    <span className="text-gray-900">10:00 AM - 4:00 PM</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Sunday</span>
-                    <span className="text-gray-900">Closed</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <button className="bg-purple-700 text-white px-4 py-2 rounded-md hover:bg-purple-800">
-              Update Availability
-            </button>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">
-              Notifications
-            </h2>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              <div className="border-l-4 border-purple-500 pl-4 py-2">
-                <p className="font-medium text-gray-900">
-                  New appointment request
-                </p>
-                <p className="text-gray-600 text-sm">
-                  Emily Davis requested a haircut appointment for tomorrow at
-                  3:00 PM.
-                </p>
-                <p className="text-gray-500 text-xs mt-1">10 minutes ago</p>
-              </div>
-              <div className="border-l-4 border-green-500 pl-4 py-2">
-                <p className="font-medium text-gray-900">
-                  Appointment confirmed
-                </p>
-                <p className="text-gray-600 text-sm">
-                  Your 2:30 PM appointment with Robert Garcia has been
-                  confirmed.
-                </p>
-                <p className="text-gray-500 text-xs mt-1">1 hour ago</p>
-              </div>
-              <div className="border-l-4 border-red-500 pl-4 py-2">
-                <p className="font-medium text-gray-900">
-                  Appointment cancelled
-                </p>
-                <p className="text-gray-600 text-sm">
-                  The 4:00 PM appointment with Lisa Thompson has been cancelled.
-                </p>
-                <p className="text-gray-500 text-xs mt-1">3 hours ago</p>
-              </div>
-            </div>
-            <div className="mt-4 text-center">
-              <button className="text-sm text-purple-700 hover:text-purple-900 font-medium">
-                View All Notifications
+
+        {/* Availability Toggle */}
+        {!sidebarCollapsed && (
+          <div className="px-4 py-3 border-b border-gray-700">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-300">Availability</span>
+              <button
+                onClick={toggleAvailability}
+                className="flex items-center space-x-2"
+              >
+                {isAvailable ? (
+                  <ToggleRightIcon size={20} className="text-green-400" />
+                ) : (
+                  <ToggleLeftIcon size={20} className="text-red-400" />
+                )}
               </button>
             </div>
+            <div className="mt-1">
+              <span className={`text-xs px-2 py-1 rounded-full ${
+                isAvailable 
+                  ? 'bg-green-500/20 text-green-400' 
+                  : 'bg-red-500/20 text-red-400'
+              }`}>
+                {isAvailable ? 'Available' : 'Unavailable'}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Logout */}
+        {!sidebarCollapsed && (
+          <div className="absolute left-4 right-4 bottom-4">
+            <button
+              onClick={handleLogout}
+              className="w-full py-2 bg-red-700 text-sm font-semibold text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+            >
+              <LogOutIcon size={16} />
+              Logout
+            </button>
+          </div>
+        )}
       </div>
-    </div>;
+
+      {/* Main Content */}
+      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-64'} flex-1`}>
+        {/* Header */}
+        <header className="bg-[#181818] border-b border-gray-700 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Staff Dashboard</h1>
+              <p className="text-gray-400 mt-1">Welcome back, {user.username || 'Staff Member'}!</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              {/* Availability Status */}
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 rounded-full ${
+                  isAvailable ? 'bg-green-400' : 'bg-red-400'
+                }`}></div>
+                <span className="text-sm text-gray-400">
+                  {isAvailable ? 'Available' : 'Unavailable'}
+                </span>
+              </div>
+              
+              <div className="text-right">
+                <p className="text-white text-sm font-medium">
+                  {user.username ? user.username.charAt(0).toUpperCase() + user.username.slice(1) : 'Staff'}
+                </p>
+                <p className="text-gray-400 text-xs">Staff Member</p>
+              </div>
+              <div className="w-10 h-10 bg-[#F7BF24] rounded-full flex items-center justify-center">
+                <UserIcon size={20} className="text-black" />
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Dashboard Content */}
+        <main className="p-6">
+          {/* Availability Card */}
+          <div className="bg-[#181818] rounded-xl border border-gray-700 mb-6">
+            <div className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className={`p-3 rounded-lg ${
+                    isAvailable ? 'bg-green-500/10' : 'bg-red-500/10'
+                  }`}>
+                    <SettingsIcon size={24} className={isAvailable ? 'text-green-400' : 'text-red-400'} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">
+                      Status: {isAvailable ? 'Available' : 'Unavailable'}
+                    </h3>
+                    <p className="text-sm text-gray-400">
+                      {isAvailable 
+                        ? 'You can receive new appointment requests' 
+                        : 'New appointments are paused'
+                      }
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={toggleAvailability}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    isAvailable 
+                      ? 'bg-red-700 hover:bg-red-600 text-white' 
+                      : 'bg-green-700 hover:bg-green-600 text-white'
+                  }`}
+                >
+                  {isAvailable ? 'Go Unavailable' : 'Go Available'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {keyMetrics.map((metric, index) => (
+              <div key={index} className="bg-[#181818] p-6 rounded-xl border border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 rounded-lg bg-gray-500/10">
+                    <metric.icon size={24} className={metric.color} />
+                  </div>
+                </div>
+                <h3 className="text-3xl font-bold text-white mb-1">{metric.value}</h3>
+                <p className="text-gray-400 font-medium">{metric.title}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Today's Appointments */}
+          <div className="bg-[#181818] rounded-xl border border-gray-700">
+            <div className="p-6 border-b border-gray-700">
+              <h2 className="text-xl font-bold text-white">Today's Appointments</h2>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                {todaysAppointments.map((appointment) => (
+                  <div key={appointment.id} className="bg-[#232323] rounded-lg p-4 border border-gray-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-[#F7BF24] rounded-full flex items-center justify-center text-black font-bold">
+                          {appointment.clientName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-white">{appointment.clientName}</h4>
+                          <p className="text-sm text-gray-400">{appointment.service}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-white">{appointment.time}</p>
+                        </div>
+                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          appointment.status === 'upcoming' ? 'bg-blue-500/20 text-blue-400' :
+                          appointment.status === 'in-progress' ? 'bg-green-500/20 text-green-400' :
+                          'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {appointment.status}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex space-x-2">
+                      <button className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded-md text-sm transition-colors">
+                        <CheckCircleIcon size={14} className="inline mr-1" />
+                        Start
+                      </button>
+                      <button className="bg-red-700 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm transition-colors">
+                        <XCircleIcon size={14} className="inline mr-1" />
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 };
+
 export default StaffDashboard;

@@ -19,8 +19,17 @@ import {
   StarIcon,
   XIcon
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+interface ApiUser {
+  id: number;
+  username: string;
+  phoneNumber: string;
+  role: string;
+  email?: string;
+  createdAt?: string;
+}
 
 interface Customer {
   id: number;
@@ -55,117 +64,195 @@ const AdminUsers = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Mock customers data - focusing only on customers
-  const customersData = [
-    {
-      id: 1,
-      name: 'Sarah Johnson',
-      email: 'sarah.johnson@email.com',
-      phone: '+1 (555) 123-4567',
-      status: 'active',
-      registrationDate: '2024-01-15',
-      lastVisit: '2025-06-20',
-      totalAppointments: 15,
-      totalSpent: 1250.00,
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '123 Main St, City, State 12345',
-      dateOfBirth: '1992-05-15',
-      preferences: ['Hair Styling', 'Hair Coloring'],
-      notes: 'Prefers appointments in the morning',
-      averageRating: 4.8,
-      lastFeedback: 'Excellent service as always!'
-    },
-    {
-      id: 2,
-      name: 'Michael Chen',
-      email: 'michael.chen@email.com',
-      phone: '+1 (555) 345-6789',
-      status: 'active',
-      registrationDate: '2024-05-22',
-      lastVisit: '2025-06-25',
-      totalAppointments: 8,
-      totalSpent: 480.00,
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '456 Oak Ave, City, State 12345',
-      dateOfBirth: '1988-10-22',
-      preferences: ['Beard Styling', 'Hair Cut'],
-      notes: 'Regular customer, comes every 3 weeks',
-      averageRating: 4.5,
-      lastFeedback: 'Great barber services!'
-    },
-    {
-      id: 3,
-      name: 'Jessica Williams',
-      email: 'jessica.williams@email.com',
-      phone: '+1 (555) 567-8901',
-      status: 'inactive',
-      registrationDate: '2023-11-30',
-      lastVisit: '2024-12-15',
-      totalAppointments: 3,
-      totalSpent: 180.00,
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '789 Pine St, City, State 12345',
-      dateOfBirth: '1995-03-08',
-      preferences: ['Spa Services'],
-      notes: 'Moved to another city',
-      averageRating: 4.0,
-      lastFeedback: 'Good experience overall'
-    },
-    {
-      id: 4,
-      name: 'Robert Garcia',
-      email: 'robert.garcia@email.com',
-      phone: '+1 (555) 789-0123',
-      status: 'active',
-      registrationDate: '2024-02-14',
-      lastVisit: '2025-06-24',
-      totalAppointments: 12,
-      totalSpent: 720.00,
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '321 Elm St, City, State 12345',
-      dateOfBirth: '1985-09-12',
-      preferences: ['Full Service Package', 'Beard Styling'],
-      notes: 'VIP customer, prefers premium services',
-      averageRating: 5.0,
-      lastFeedback: 'Outstanding service every time!'
-    },
-    {
-      id: 5,
-      name: 'Emily Davis',
-      email: 'emily.davis@email.com',
-      phone: '+1 (555) 234-5678',
-      status: 'active',
-      registrationDate: '2024-06-01',
-      lastVisit: '2025-06-26',
-      totalAppointments: 4,
-      totalSpent: 320.00,
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '654 Maple Dr, City, State 12345',
-      dateOfBirth: '1990-12-03',
-      preferences: ['Hair Coloring', 'Hair Styling'],
-      notes: 'New customer, very satisfied',
-      averageRating: 4.7,
-      lastFeedback: 'Amazing color work!'
-    },
-    {
-      id: 6,
-      name: 'David Wilson',
-      email: 'david.wilson@email.com',
-      phone: '+1 (555) 876-5432',
-      status: 'active',
-      registrationDate: '2023-08-10',
-      lastVisit: '2025-06-23',
-      totalAppointments: 18,
-      totalSpent: 1080.00,
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=crop&w=50&q=80',
-      address: '987 Cedar Ln, City, State 12345',
-      dateOfBirth: '1987-07-18',
-      preferences: ['Hair Cut', 'Beard Styling'],
-      notes: 'Regular monthly appointments',
-      averageRating: 4.6,
-      lastFeedback: 'Consistent quality service'
+  // Customer data from API
+  const [customersData, setCustomersData] = useState<Customer[]>([]);
+  
+  // Form data for add/edit modals
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
+
+  // Load customers from backend
+  const loadCustomers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/admin/users', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const usersFromApi = await response.json();
+        // Filter only customer users and map to Customer interface
+        const customerUsers = usersFromApi.filter((user: ApiUser) => user.role === 'customer');
+        const mappedCustomers = customerUsers.map((apiUser: ApiUser) => ({
+          id: apiUser.id,
+          name: apiUser.username,
+          email: apiUser.email || `${apiUser.username.toLowerCase().replace(' ', '.')}@email.com`,
+          phone: apiUser.phoneNumber,
+          status: 'active', // Assuming all users are active
+          registrationDate: apiUser.createdAt ? new Date(apiUser.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          lastVisit: new Date().toISOString().split('T')[0], // Default to today
+          totalAppointments: Math.floor(Math.random() * 20) + 1, // Random for demo
+          totalSpent: Math.floor(Math.random() * 1000) + 100, // Random for demo
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(apiUser.username)}&background=F7BF24&color=000`,
+          address: 'Address not provided',
+          dateOfBirth: '1990-01-01', // Default
+          preferences: ['Hair Cut', 'Styling'], // Default
+          notes: 'Customer profile from backend',
+          averageRating: 4.5, // Default
+          lastFeedback: 'Great service!'
+        }));
+        setCustomersData(mappedCustomers);
+      } else {
+        console.error('Failed to load customers:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('Error loading customers:', error);
     }
-  ];
+  };
+
+  // Load customers on component mount
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  // Add new customer
+  const handleAddCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/admin/register-customer', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: formData.name,
+          email: formData.email,
+          phoneNumber: formData.phone,
+          role: 'customer'
+        })
+      });
+
+      if (response.ok) {
+        // Reload customers list to include the new customer
+        await loadCustomers();
+        setShowAddModal(false);
+        setFormData({ name: '', email: '', phone: '', address: '' });
+      } else {
+        console.error('Failed to add customer:', response.status, response.statusText);
+        alert('Failed to add customer. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error adding customer:', error);
+      alert('Error adding customer. Please try again.');
+    }
+  };
+
+  // Update customer
+  const handleUpdateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomer) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:8080/api/admin/users/${selectedCustomer.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: formData.name,
+          email: formData.email,
+          phoneNumber: formData.phone
+        })
+      });
+
+      if (response.ok) {
+        // Reload customers list to reflect changes
+        await loadCustomers();
+        setShowEditModal(false);
+        setSelectedCustomer(null);
+        setFormData({ name: '', email: '', phone: '', address: '' });
+      } else {
+        console.error('Failed to update customer:', response.status, response.statusText);
+        alert('Failed to update customer. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      alert('Error updating customer. Please try again.');
+    }
+  };
+
+  // Delete customer
+  const handleConfirmDelete = async () => {
+    if (!selectedCustomer) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:8080/api/admin/users/${selectedCustomer.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        // Reload customers list to reflect deletion
+        await loadCustomers();
+        setShowDeleteModal(false);
+        setSelectedCustomer(null);
+      } else {
+        console.error('Failed to delete customer:', response.status, response.statusText);
+        alert('Failed to delete customer. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      alert('Error deleting customer. Please try again.');
+    }
+  };
+
+  // Handle bulk status changes
+  const handleBulkStatusChange = async (newStatus: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const promises = selectedCustomers.map(customerId =>
+        fetch(`http://localhost:8080/api/admin/users/${customerId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status: newStatus })
+        })
+      );
+
+      const results = await Promise.all(promises);
+      const allSuccessful = results.every(response => response.ok);
+
+      if (allSuccessful) {
+        // Reload customers list to reflect status changes
+        await loadCustomers();
+        setSelectedCustomers([]);
+      } else {
+        console.error('Some status updates failed');
+        alert('Some status updates failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Error updating status. Please try again.');
+    }
+  };
 
   // Filter and sort customers
   const filteredAndSortedCustomers = customersData
@@ -225,6 +312,12 @@ const AdminUsers = () => {
 
   const handleEditCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
+    setFormData({
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address
+    });
     setShowEditModal(true);
   };
 
@@ -253,7 +346,10 @@ const AdminUsers = () => {
           </div>
           <div className="flex items-center space-x-3">
             <button 
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+                setFormData({ name: '', email: '', phone: '', address: '' });
+                setShowAddModal(true);
+              }}
               className="bg-[#F7BF24] hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-semibold transition-colors duration-200 flex items-center"
             >
               <PlusIcon size={18} className="mr-2" />
@@ -350,10 +446,16 @@ const AdminUsers = () => {
                   {selectedCustomers.length} customer{selectedCustomers.length > 1 ? 's' : ''} selected
                 </span>
                 <div className="flex space-x-2">
-                  <button className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-500/30 transition-colors">
+                  <button 
+                    onClick={() => handleBulkStatusChange('active')}
+                    className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-500/30 transition-colors"
+                  >
                     Activate
                   </button>
-                  <button className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors">
+                  <button 
+                    onClick={() => handleBulkStatusChange('inactive')}
+                    className="px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors"
+                  >
                     Deactivate
                   </button>
                   <button className="px-3 py-1 bg-gray-500/20 text-gray-400 rounded border border-gray-500/30 hover:bg-gray-500/30 transition-colors">
@@ -586,34 +688,45 @@ const AdminUsers = () => {
                 <XIcon size={20} className="text-gray-400" />
               </button>
             </div>
-            <form className="space-y-4">
+            <form onSubmit={handleAddCustomer} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Name</label>
                 <input
                   type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                   placeholder="Enter customer name"
+                  required
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
                 <input
                   type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                   placeholder="Enter email address"
+                  required
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Phone</label>
                 <input
                   type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                   placeholder="Enter phone number"
+                  required
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Address</label>
                 <textarea
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                   rows={3}
                   placeholder="Enter customer address"
@@ -622,7 +735,10 @@ const AdminUsers = () => {
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setFormData({ name: '', email: '', phone: '', address: '' });
+                  }}
                   className="flex-1 px-4 py-2 bg-[#232323] border border-gray-600 rounded-lg text-gray-300 hover:bg-[#2a2a2a] transition-colors"
                 >
                   Cancel
@@ -652,35 +768,46 @@ const AdminUsers = () => {
                 <XIcon size={20} className="text-gray-400" />
               </button>
             </div>
-            <form className="space-y-4">
+            <form onSubmit={handleUpdateCustomer} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Name</label>
                 <input
                   type="text"
-                  defaultValue={selectedCustomer.name}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
+                  required
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
                 <input
                   type="email"
-                  defaultValue={selectedCustomer.email}
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
+                  required
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Phone</label>
                 <input
                   type="tel"
-                  defaultValue={selectedCustomer.phone}
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
+                  required
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Status</label>
                 <select
-                  defaultValue={selectedCustomer.status}
+                  value={selectedCustomer?.status || 'active'}
+                  onChange={(e) => {
+                    if (selectedCustomer) {
+                      setSelectedCustomer({ ...selectedCustomer, status: e.target.value });
+                    }
+                  }}
                   className="w-full bg-[#232323] border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-[#F7BF24] focus:outline-none"
                 >
                   <option value="active">Active</option>
@@ -690,7 +817,11 @@ const AdminUsers = () => {
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowEditModal(false)}
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setSelectedCustomer(null);
+                    setFormData({ name: '', email: '', phone: '', address: '' });
+                  }}
                   className="flex-1 px-4 py-2 bg-[#232323] border border-gray-600 rounded-lg text-gray-300 hover:bg-[#2a2a2a] transition-colors"
                 >
                   Cancel
@@ -728,11 +859,7 @@ const AdminUsers = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    // Handle delete logic here
-                    setShowDeleteModal(false);
-                    setSelectedCustomer(null);
-                  }}
+                  onClick={handleConfirmDelete}
                   className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition-colors"
                 >
                   Delete
