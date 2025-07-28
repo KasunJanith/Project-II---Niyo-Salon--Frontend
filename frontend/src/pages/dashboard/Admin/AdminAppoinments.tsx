@@ -11,6 +11,7 @@ import {
   XCircleIcon,
   BellIcon,
   Users2Icon,
+  UserMinusIcon,
   PhoneIcon,
   MailIcon,
   GridIcon,
@@ -464,6 +465,66 @@ function AdminAppointments() {
     }
   };
 
+  // Unassign staff from appointment
+  const unassignStaffFromAppointment = async (appointmentId: string): Promise<boolean> => {
+    try {
+      setIsAssigningStaff(true);
+      setError(null);
+
+      // Find the appointment we're trying to unassign staff from
+      const targetAppointment = appointments.find((apt: Appointment) => apt.id === appointmentId);
+      if (!targetAppointment) {
+        setError("Appointment not found.");
+        return false;
+      }
+
+      if (!targetAppointment.staffId || targetAppointment.staffName === "Unassigned") {
+        setError("No staff is currently assigned to this appointment.");
+        return false;
+      }
+
+      // Call the backend endpoint to unassign staff
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `http://localhost:8080${API_ENDPOINTS.APPOINTMENTS}/${appointmentId}/unassign-staff`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        await response.json();
+
+        // Reload appointments from backend to get fresh data
+        await loadAppointments();
+
+        // Clear slot availability cache for this slot to reflect the change
+        const slotKey = `${targetAppointment.date}-${targetAppointment.time}`;
+        setSlotAvailabilityCache((prev) => {
+          const newCache = new Map(prev);
+          newCache.delete(slotKey);
+          return newCache;
+        });
+
+        setError(null);
+        return true;
+      } else {
+        await response.text();
+        setError(`Failed to unassign staff. Server responded with: ${response.status}`);
+        return false;
+      }
+    } catch (error) {
+      setError("Network error while unassigning staff. Please check if the backend server is running.");
+      return false;
+    } finally {
+      setIsAssigningStaff(false);
+    }
+  };
+
   // Handle creating new appointment with comprehensive validation
   const handleCreateAppointment = async (): Promise<void> => {
     // Input validation
@@ -742,6 +803,13 @@ function AdminAppointments() {
       }
     } else {
       alert("Please select a staff member.");
+    }
+  };
+
+  const handleUnassignStaff = async (appointment: Appointment): Promise<void> => {
+    const success = await unassignStaffFromAppointment(appointment.id || "");
+    if (success) {
+      // Optional: Show success message or perform additional actions
     }
   };
 
@@ -1149,6 +1217,16 @@ function AdminAppointments() {
                           >
                             <Users2Icon className="h-4 w-4" />
                           </button>
+                          {appointment.staffId && appointment.staffName !== "Unassigned" && (
+                            <button
+                              onClick={() => handleUnassignStaff(appointment)}
+                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                              title="Unassign Staff"
+                              disabled={isAssigningStaff}
+                            >
+                              <UserMinusIcon className="h-4 w-4" />
+                            </button>
+                          )}
                           <button className="p-2 text-gray-400 hover:text-gray-300 hover:bg-gray-500/10 rounded-lg transition-colors">
                             <MoreVerticalIcon className="h-4 w-4" />
                           </button>
@@ -1239,6 +1317,14 @@ function AdminAppointments() {
                               <span className="text-white">
                                 {appointment.staffName}
                               </span>
+                              <button
+                                onClick={() => handleUnassignStaff(appointment)}
+                                className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded border border-red-500/30 hover:bg-red-500/30 transition-colors ml-1"
+                                title="Unassign Staff"
+                                disabled={isAssigningStaff}
+                              >
+                                Unassign
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1295,6 +1381,16 @@ function AdminAppointments() {
                           >
                             <Users2Icon className="h-4 w-4" />
                           </button>
+                          {appointment.staffId && appointment.staffName !== "Unassigned" && (
+                            <button
+                              onClick={() => handleUnassignStaff(appointment)}
+                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                              title="Unassign Staff"
+                              disabled={isAssigningStaff}
+                            >
+                              <UserMinusIcon className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             className="p-2 text-green-400 hover:text-green-300 hover:bg-green-500/10 rounded-lg transition-colors"
                             title="Send Notification"
@@ -1453,6 +1549,20 @@ function AdminAppointments() {
                 >
                   Close
                 </button>
+                {selectedAppointment.staffId && selectedAppointment.staffName !== "Unassigned" && (
+                  <button
+                    onClick={async () => {
+                      const success = await unassignStaffFromAppointment(selectedAppointment.id || "");
+                      if (success) {
+                        setShowDetailModal(false);
+                      }
+                    }}
+                    className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-4 py-2 rounded-lg transition-all duration-200"
+                    disabled={isAssigningStaff}
+                  >
+                    Unassign Staff
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setShowDetailModal(false);
