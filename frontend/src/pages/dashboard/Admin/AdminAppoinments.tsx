@@ -1536,7 +1536,7 @@ function AdminAppointments() {
                   {selectedAppointment.notes && (
                     <div className="mt-4">
                       <p className="text-sm text-gray-400">Notes</p>
-                      <p className="text-white">{selectedAppointment.notes}</p>
+                      <div className="text-white">{selectedAppointment.notes}</div>
                     </div>
                   )}
                 </div>
