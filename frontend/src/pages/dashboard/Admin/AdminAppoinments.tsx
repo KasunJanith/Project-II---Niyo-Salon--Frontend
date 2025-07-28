@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import {
   services,
-  staffMembers,
   customers,
   availableTimeSlots,
   formatTimeForDisplay,
@@ -33,24 +32,54 @@ import {
   type ServiceResponse,
 } from "../../../services/adminService";
 
-// Use the shared appointment interface but extend it for admin view
-interface Appointment extends AppointmentBooking {
-  avatar: string;
+// International standard interfaces following ISO and best practices
+interface StaffMember {
+  id: number;
+  name: string;
+  role: string;
+  isActive: boolean;
 }
 
-// Backend appointment DTO interface
+// Use the shared appointment interface but extend it for admin view
+interface Appointment extends AppointmentBooking {
+  avatar?: string;
+}
+
+// Backend appointment DTO interface following API standards
 interface BackendAppointmentDTO {
   id: number;
   customerName: string;
   customerPhone: string;
   services: string;
-  date: string; // LocalDate as string (YYYY-MM-DD)
-  time: string; // LocalTime as string (HH:MM:SS)
+  date: string; // ISO 8601 date format (YYYY-MM-DD)
+  time: string; // ISO 8601 time format (HH:MM:SS)
   notes?: string;
   status: "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
+  staffId?: number;
 }
 
+// Constants following international naming conventions
+const APPOINTMENT_STATUS = {
+  PENDING: "PENDING",
+  CONFIRMED: "CONFIRMED",
+  CANCELLED: "CANCELLED", 
+  COMPLETED: "COMPLETED"
+} as const;
+
+const PRIORITY_LEVELS = {
+  HIGH: "high",
+  MEDIUM: "medium", 
+  LOW: "low"
+} as const;
+
+const API_ENDPOINTS = {
+  APPOINTMENTS: "/api/appointments",
+  STAFF: "/api/admin/staff",
+  SERVICES: "/api/admin/services"
+} as const;
+
 function AdminAppointments() {
+  // State management following React best practices
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -62,27 +91,20 @@ function AdminAppointments() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showStaffChangeModal, setShowStaffChangeModal] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] =
-    useState<Appointment | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [newStaffId, setNewStaffId] = useState("");
 
-  // Staff-related state
-  const [activeStaffList, setActiveStaffList] = useState<
-    Array<{ id: number; name: string; role: string; isActive: boolean }>
-  >([]);
+  // Staff-related state with proper typing
+  const [activeStaffList, setActiveStaffList] = useState<StaffMember[]>([]);
   const [activeStaffCount, setActiveStaffCount] = useState(0);
-  const [availableStaffForSlot, setAvailableStaffForSlot] = useState<
-    Array<{ id: number; name: string; role: string }>
-  >([]);
-  const [slotAvailabilityCache, setSlotAvailabilityCache] = useState<
-    Map<string, number>
-  >(new Map());
+  const [availableStaffForSlot, setAvailableStaffForSlot] = useState<StaffMember[]>([]);
+  const [slotAvailabilityCache, setSlotAvailabilityCache] = useState<Map<string, number>>(new Map());
   const [isAssigningStaff, setIsAssigningStaff] = useState(false);
 
   // Services state
   const [servicesList, setServicesList] = useState<ServiceResponse[]>([]);
-  const [loadingServices, setLoadingServices] = useState(false);
+  const [loadingServices] = useState(false);
 
   // Form states for add appointment modal
   const [newAppointment, setNewAppointment] = useState({
@@ -97,65 +119,62 @@ function AdminAppointments() {
     notes: "",
   });
 
-  // Load appointments from backend API
+  // Error handling state
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Load appointments from backend API with proper error handling
   useEffect(() => {
     const loadAllData = async () => {
       try {
-        // First, load staff data
-        const token = localStorage.getItem("token");
-        const staffResponse = await fetch(
-          "http://localhost:8080/api/admin/staff",
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        setLoading(true);
+        setError(null);
 
-        let staffData = [];
+        // Load staff data with proper typing
+        const token = localStorage.getItem("token");
+        const staffResponse = await fetch(`http://localhost:8080${API_ENDPOINTS.STAFF}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        let staffData: StaffMember[] = [];
         if (staffResponse.ok) {
-          const staffFromApi = await staffResponse.json();
-          staffData = staffFromApi.filter((staff: any) => staff.isActive);
-          setActiveStaffList(staffData); // Set staff in state
+          const staffFromApi: StaffMember[] = await staffResponse.json();
+          staffData = staffFromApi.filter((staff: StaffMember) => staff.isActive);
+          setActiveStaffList(staffData);
           setActiveStaffCount(staffData.length);
-          console.log(`Loaded ${staffData.length} active staff members`);
+        } else {
+          throw new Error(`Failed to load staff: ${staffResponse.status}`);
         }
 
         // Load services
-        const servicesFromApi = await adminService.getAllServices();
-        setServicesList(servicesFromApi);
+        try {
+          const servicesFromApi = await adminService.getAllServices();
+          setServicesList(servicesFromApi);
+        } catch (servicesError) {
+          // Continue without services - non-critical for initial load
+        }
 
-        // Now load appointments and map with the staff data we just fetched
-        const appointmentsResponse = await fetch(
-          "http://localhost:8080/api/appointments",
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        // Load appointments with proper error handling
+        const appointmentsResponse = await fetch(`http://localhost:8080${API_ENDPOINTS.APPOINTMENTS}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
 
         if (appointmentsResponse.ok) {
-          const appointmentData = await appointmentsResponse.json();
+          const appointmentData: (BackendAppointmentDTO & { staffId?: number })[] = 
+            await appointmentsResponse.json();
 
-          // Map appointments using the staffData we just loaded (not the state)
-          const adminAppointments = appointmentData.map(
-            (appointment: BackendAppointmentDTO & { staffId?: number }) => {
-              // Use staffData directly instead of activeStaffList state
+          // Map appointments with proper typing
+          const adminAppointments: Appointment[] = appointmentData.map(
+            (appointment) => {
               const assignedStaff = staffData.find(
-                (staff) => staff.id === appointment.staffId
-              );
-
-              console.log(
-                "Mapping appointment:",
-                appointment.id,
-                "staffId:",
-                appointment.staffId,
-                "found staff:",
-                assignedStaff
+                (staff: StaffMember) => staff.id === appointment.staffId
               );
 
               return {
@@ -170,20 +189,14 @@ function AdminAppointments() {
                 serviceCategory: "General",
                 serviceDuration: "60 min",
                 staffName: assignedStaff ? assignedStaff.name : "Unassigned",
-                staffId: appointment.staffId
-                  ? appointment.staffId.toString()
-                  : undefined,
+                staffId: appointment.staffId?.toString(),
                 date: appointment.date,
-                time: appointment.time.substring(0, 5),
+                time: appointment.time.substring(0, 5), // Convert HH:MM:SS to HH:MM
                 endTime: calculateEndTime(appointment.time.substring(0, 5), 60),
-                status: appointment.status as
-                  | "PENDING"
-                  | "CONFIRMED"
-                  | "COMPLETED"
-                  | "CANCELLED",
+                status: appointment.status,
                 notes: appointment.notes || "",
-                priority: "medium" as const,
-                bookedBy: "customer" as const,
+                priority: PRIORITY_LEVELS.MEDIUM,
+                bookedBy: "customer",
                 bookedByUserId: undefined,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
@@ -192,23 +205,25 @@ function AdminAppointments() {
             }
           );
 
-          console.log(
-            "Setting appointments with staff names:",
-            adminAppointments
-          );
           setAppointments(adminAppointments);
+        } else {
+          throw new Error(`Failed to load appointments: ${appointmentsResponse.status}`);
         }
       } catch (error) {
-        console.error("Error loading data:", error);
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        console.error("Error loading data:", errorMessage);
+        setError(errorMessage);
+      } finally {
+        setLoading(false);
       }
     };
 
     loadAllData();
   }, []);
 
-  const loadAppointments = async () => {
+  const loadAppointments = async (): Promise<void> => {
     try {
-      const response = await fetch("http://localhost:8080/api/appointments", {
+      const response = await fetch(`http://localhost:8080${API_ENDPOINTS.APPOINTMENTS}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -216,30 +231,17 @@ function AdminAppointments() {
       });
 
       if (response.ok) {
-        const appointmentData = await response.json();
+        const appointmentData: (BackendAppointmentDTO & { staffId?: number })[] = 
+          await response.json();
 
         // Use the current activeStaffList from state
-        const currentStaffList =
-          activeStaffList.length > 0 ? activeStaffList : [];
+        const currentStaffList = activeStaffList.length > 0 ? activeStaffList : [];
 
-        const adminAppointments = appointmentData.map(
-          (appointment: BackendAppointmentDTO & { staffId?: number }) => {
-            const assignedStaff = currentStaffList.find(
-              (staff) => staff.id === appointment.staffId
-            );
-
-            console.log(
-              "Mapping appointment:",
-              appointment.id,
-              "staffId:",
-              appointment.staffId,
-              "found staff:",
-              assignedStaff,
-              "staff list length:",
-              currentStaffList.length
-            );
-
-            return {
+        const adminAppointments: Appointment[] = appointmentData.map(
+            (appointment) => {
+              const assignedStaff = currentStaffList.find(
+                (staff: StaffMember) => staff.id === appointment.staffId
+              );            return {
               id: appointment.id.toString(),
               customerName: appointment.customerName,
               customerEmail: `${appointment.customerName
@@ -251,20 +253,14 @@ function AdminAppointments() {
               serviceCategory: "General",
               serviceDuration: "60 min",
               staffName: assignedStaff ? assignedStaff.name : "Unassigned",
-              staffId: appointment.staffId
-                ? appointment.staffId.toString()
-                : undefined,
+              staffId: appointment.staffId?.toString(),
               date: appointment.date,
-              time: appointment.time.substring(0, 5),
+              time: appointment.time.substring(0, 5), // Convert HH:MM:SS to HH:MM
               endTime: calculateEndTime(appointment.time.substring(0, 5), 60),
-              status: appointment.status as
-                | "PENDING"
-                | "CONFIRMED"
-                | "COMPLETED"
-                | "CANCELLED",
+              status: appointment.status,
               notes: appointment.notes || "",
-              priority: "medium" as const,
-              bookedBy: "customer" as const,
+              priority: PRIORITY_LEVELS.MEDIUM,
+              bookedBy: "customer",
               bookedByUserId: undefined,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -273,105 +269,22 @@ function AdminAppointments() {
           }
         );
 
-        console.log("Setting appointments:", adminAppointments);
         setAppointments(adminAppointments);
       } else {
-        console.error(
-          "Failed to load appointments:",
-          response.status,
-          response.statusText
-        );
+        console.error("Failed to load appointments:", response.status, response.statusText);
         setAppointments([]);
+        setError(`Failed to load appointments: ${response.status}`);
       }
     } catch (error) {
-      console.error("Failed to load appointments:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      console.error("Failed to load appointments:", errorMessage);
       setAppointments([]);
+      setError(errorMessage);
     }
-  };
-
-  // Load active staff from backend
-  const loadActiveStaff = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8080/api/admin/staff", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const staffFromApi = await response.json();
-        const activeStaff = staffFromApi.filter(
-          (staff: {
-            id: number;
-            name: string;
-            role: string;
-            isActive: boolean;
-          }) => staff.isActive
-        );
-
-        setActiveStaffList(activeStaff);
-        setActiveStaffCount(activeStaff.length);
-
-        console.log(`Loaded ${activeStaff.length} active staff members`);
-      } else {
-        console.error(
-          "Failed to load staff:",
-          response.status,
-          response.statusText
-        );
-        setActiveStaffList([]);
-        setActiveStaffCount(0);
-      }
-    } catch (error) {
-      console.error("Error loading staff:", error);
-      setActiveStaffList([]);
-      setActiveStaffCount(0);
-    }
-  };
-
-  // Load services from backend
-  const loadServices = async () => {
-    try {
-      setLoadingServices(true);
-      const servicesFromApi = await adminService.getAllServices();
-      setServicesList(servicesFromApi);
-      console.log(`Loaded ${servicesFromApi.length} services`);
-    } catch (error) {
-      console.error("Error loading services:", error);
-      setServicesList([]);
-    } finally {
-      setLoadingServices(false);
-    }
-  };
-
-  // Helper functions for filter dropdowns
-  const getUniqueServices = () => {
-    if (loadingServices) {
-      return []; // Return empty array while loading
-    }
-    if (servicesList.length === 0) {
-      return []; // Return empty array if no services loaded
-    }
-    const categories = servicesList
-      .map((service) => service.category)
-      .filter(Boolean);
-    return [...new Set(categories)].sort();
-  };
-
-  const getUniqueStaffNames = () => {
-    if (activeStaffList.length === 0) {
-      return []; // Return empty array when no staff loaded yet
-    }
-    return activeStaffList
-      .map((staff) => ({ id: staff.id.toString(), name: staff.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
   };
 
   // Check slot availability (how many appointments exist for a specific date/time)
-  const checkSlotAvailability = async (date: string, time: string) => {
+  const checkSlotAvailability = async (date: string, time: string): Promise<number> => {
     const slotKey = `${date}-${time}`;
 
     // Check cache first
@@ -381,7 +294,7 @@ function AdminAppointments() {
 
     try {
       const response = await fetch(
-        `http://localhost:8080/api/appointments/slot?date=${date}&time=${time}`,
+        `http://localhost:8080${API_ENDPOINTS.APPOINTMENTS}/slot?date=${date}&time=${time}`,
         {
           method: "GET",
           headers: {
@@ -391,7 +304,7 @@ function AdminAppointments() {
       );
 
       if (response.ok) {
-        const slotAppointments = await response.json();
+        const slotAppointments: BackendAppointmentDTO[] = await response.json();
         const bookedCount = slotAppointments.length;
 
         // Cache the result
@@ -405,63 +318,113 @@ function AdminAppointments() {
         return 0;
       }
     } catch (error) {
-      console.error("Error checking slot availability:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error("Error checking slot availability:", errorMessage);
       return 0;
     }
   };
 
-  // Get available staff for a specific time slot
-  const getAvailableStaffForSlot = async (date: string, time: string) => {
+  // Helper functions for filter dropdowns
+  const getUniqueServices = (): string[] => {
+    if (loadingServices || servicesList.length === 0) {
+      return []; // Return empty array while loading or no services
+    }
+    const categories = servicesList
+      .map((service: ServiceResponse) => service.category)
+      .filter(Boolean);
+    return [...new Set(categories)].sort();
+  };
+
+  const getUniqueStaffNames = (): Array<{ id: string; name: string }> => {
+    if (activeStaffList.length === 0) {
+      return []; // Return empty array when no staff loaded yet
+    }
+    return activeStaffList
+      .map((staff: StaffMember) => ({ id: staff.id.toString(), name: staff.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  // Get available staff for a specific time slot with conflict checking
+  const getAvailableStaffForSlot = async (date: string, time: string): Promise<StaffMember[]> => {
     try {
-      // Instead of calling an API, we'll use the already loaded active staff list
-      // For now, we assume all active staff are available (basic implementation)
-      // In the future, this could be enhanced with actual scheduling logic
+      // Filter out staff members who are already assigned to other appointments at the same time slot
+      const availableStaff = activeStaffList.filter((staff: StaffMember) => {
+        if (!staff.isActive) return false;
 
-      console.log("Getting available staff for slot:", date, time);
-      console.log("Active staff list:", activeStaffList);
+        // Check if this staff member is already assigned to an appointment at this date/time
+        const isAlreadyAssigned = appointments.some((apt: Appointment) => 
+          apt.staffId === staff.id.toString() &&
+          apt.date === date &&
+          apt.time === time &&
+          apt.status !== APPOINTMENT_STATUS.CANCELLED
+        );
 
-      // Use the active staff that we already loaded
-      const availableStaff = activeStaffList.filter((staff) => staff.isActive);
+        return !isAlreadyAssigned;
+      });
 
       setAvailableStaffForSlot(availableStaff);
-      console.log("Available staff for slot:", availableStaff);
 
       return availableStaff;
     } catch (error) {
-      console.error("Error getting available staff:", error);
-      // Fallback to all active staff
-      setAvailableStaffForSlot(activeStaffList);
-      return activeStaffList;
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error("Error getting available staff:", errorMessage);
+      
+      // Fallback to all active staff (without conflict checking)
+      const fallbackStaff = activeStaffList.filter((staff: StaffMember) => staff.isActive);
+      setAvailableStaffForSlot(fallbackStaff);
+      return fallbackStaff;
     }
   };
 
-  // Assign staff to appointment
+  // Assign staff to appointment with comprehensive validation
   const assignStaffToAppointment = async (
     appointmentId: string,
     staffId: number
-  ) => {
+  ): Promise<boolean> => {
     try {
       setIsAssigningStaff(true);
 
       // Find staff member details
-      const staffMember = activeStaffList.find((staff) => staff.id === staffId);
+      const staffMember = activeStaffList.find((staff: StaffMember) => staff.id === staffId);
 
       if (!staffMember) {
-        alert("Selected staff member not found.");
+        setError("Selected staff member not found.");
         return false;
       }
 
-      console.log(
-        "Assigning staff:",
-        staffMember.name,
-        "to appointment:",
-        appointmentId
+      // Find the appointment we're trying to assign staff to
+      const targetAppointment = appointments.find((apt: Appointment) => apt.id === appointmentId);
+      if (!targetAppointment) {
+        setError("Appointment not found.");
+        return false;
+      }
+
+      // Check if this staff member is already assigned to another appointment at the same date/time
+      const conflictingAppointment = appointments.find((apt: Appointment) => 
+        apt.id !== appointmentId && // Different appointment
+        apt.staffId === staffId.toString() && // Same staff member
+        apt.date === targetAppointment.date && // Same date
+        apt.time === targetAppointment.time && // Same time
+        apt.status !== APPOINTMENT_STATUS.CANCELLED // Not cancelled
       );
+
+      if (conflictingAppointment) {
+        const conflictMessage = 
+          `Cannot assign ${staffMember.name} to this appointment.\n\n` +
+          `This staff member is already assigned to another appointment:\n` +
+          `• Customer: ${conflictingAppointment.customerName}\n` +
+          `• Date: ${conflictingAppointment.date}\n` +
+          `• Time: ${conflictingAppointment.time}\n\n` +
+          `Please choose a different staff member or reschedule one of the appointments.`;
+        
+        setError(conflictMessage);
+        return false;
+      }
 
       // Call the backend endpoint to assign staff
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `http://localhost:8080/api/appointments/${appointmentId}/assign-staff`,
+        `http://localhost:8080${API_ENDPOINTS.APPOINTMENTS}/${appointmentId}/assign-staff`,
         {
           method: "PATCH",
           headers: {
@@ -473,60 +436,51 @@ function AdminAppointments() {
       );
 
       if (response.ok) {
-        const result = await response.json();
-        console.log("Staff assigned successfully via backend:", result);
+        await response.json();
 
         // Reload appointments from backend to get fresh data
         await loadAppointments();
 
         // Clear slot availability cache for this slot
-        const appointment = appointments.find(
-          (apt) => apt.id === appointmentId
-        );
-        if (appointment) {
-          const slotKey = `${appointment.date}-${appointment.time}`;
-          setSlotAvailabilityCache((prev) => {
-            const newCache = new Map(prev);
-            newCache.delete(slotKey);
-            return newCache;
-          });
-        }
+        const slotKey = `${targetAppointment.date}-${targetAppointment.time}`;
+        setSlotAvailabilityCache((prev) => {
+          const newCache = new Map(prev);
+          newCache.delete(slotKey);
+          return newCache;
+        });
 
-        alert(`Staff "${staffMember.name}" assigned successfully!`);
+        setError(null);
         return true;
       } else {
-        const errorText = await response.text();
-        console.error("Failed to assign staff. Status:", response.status);
-        console.error("Error response:", errorText);
-        alert(
-          `Failed to assign staff. Server responded with: ${response.status}`
-        );
+        await response.text();
+        setError(`Failed to assign staff. Server responded with: ${response.status}`);
         return false;
       }
     } catch (error) {
-      console.error("Network error while assigning staff:", error);
-      alert(
-        "Network error while assigning staff. Please check if the backend server is running."
-      );
+      setError("Network error while assigning staff. Please check if the backend server is running.");
       return false;
     } finally {
       setIsAssigningStaff(false);
     }
   };
 
-  // Handle creating new appointment
-  const handleCreateAppointment = async () => {
+  // Handle creating new appointment with comprehensive validation
+  const handleCreateAppointment = async (): Promise<void> => {
+    // Input validation
     if (
       !newAppointment.customerName ||
       !newAppointment.service ||
       !newAppointment.date ||
       !newAppointment.time
     ) {
-      alert("Please fill all required fields.");
+      setError("Please fill all required fields.");
       return;
     }
 
     try {
+      setLoading(true);
+      setError(null);
+
       // Check slot availability before booking
       const bookedCount = await checkSlotAvailability(
         newAppointment.date,
@@ -534,25 +488,25 @@ function AdminAppointments() {
       );
 
       if (bookedCount >= activeStaffCount) {
-        alert(
+        setError(
           `This time slot is fully booked. There are ${activeStaffCount} active staff members and ${bookedCount} appointments already booked for this slot.`
         );
         return;
       }
 
-      // Prepare data for backend API
+      // Prepare data for backend API following international standards
       const appointmentData = {
-        customerName: newAppointment.customerName,
+        customerName: newAppointment.customerName.trim(),
         customerPhone: newAppointment.customerPhone || "000-000-0000", // Default if not provided
         services: newAppointment.service, // Single service for now
-        date: newAppointment.date, // Already in YYYY-MM-DD format
+        date: newAppointment.date, // Already in ISO format (YYYY-MM-DD)
         time: newAppointment.time + ":00", // Convert HH:MM to HH:MM:SS for backend
-        notes: newAppointment.notes || null,
+        notes: newAppointment.notes?.trim() || null,
         userId: null, // No staff assignment for now
       };
 
       const response = await fetch(
-        "http://localhost:8080/api/appointments/book",
+        `http://localhost:8080${API_ENDPOINTS.APPOINTMENTS}/book`,
         {
           method: "POST",
           headers: {
@@ -588,24 +542,99 @@ function AdminAppointments() {
 
         // Reload appointments to show the new one
         await loadAppointments();
-
-        const remainingSlots = activeStaffCount - bookedCount - 1;
-        alert(
-          `Appointment created successfully! ${remainingSlots} slots remaining for this time.`
-        );
       } else {
-        const errorText = await response.text();
-        console.error("Failed to create appointment:", errorText);
-        alert("Failed to create appointment. Please try again.");
+        await response.text();
+        setError("Failed to create appointment. Please try again.");
       }
     } catch (error) {
-      console.error("Failed to create appointment:", error);
-      alert("Network error. Please check your connection and try again.");
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Available staff members (use imported data)
-  const availableStaff = staffMembers;
+  // Utility functions for status and priority styling following international standards
+  const getStatusColor = (status: string): string => {
+    switch (status.toUpperCase()) {
+      case APPOINTMENT_STATUS.CONFIRMED:
+        return "bg-green-500";
+      case APPOINTMENT_STATUS.PENDING:
+        return "bg-yellow-500";
+      case APPOINTMENT_STATUS.COMPLETED:
+        return "bg-blue-500";
+      case APPOINTMENT_STATUS.CANCELLED:
+        return "bg-red-500";
+      default:
+        return "bg-gray-500";
+    }
+  };
+
+  const getStatusTextColor = (status: string): string => {
+    switch (status.toUpperCase()) {
+      case APPOINTMENT_STATUS.CONFIRMED:
+        return "text-green-400";
+      case APPOINTMENT_STATUS.PENDING:
+        return "text-yellow-400";
+      case APPOINTMENT_STATUS.COMPLETED:
+        return "text-blue-400";
+      case APPOINTMENT_STATUS.CANCELLED:
+        return "text-red-400";
+      default:
+        return "text-gray-400";
+    }
+  };
+
+  const getPriorityColor = (priority: string): string => {
+    switch (priority.toLowerCase()) {
+      case PRIORITY_LEVELS.HIGH:
+        return "border-l-red-500";
+      case PRIORITY_LEVELS.MEDIUM:
+        return "border-l-yellow-500";
+      case PRIORITY_LEVELS.LOW:
+        return "border-l-green-500";
+      default:
+        return "border-l-gray-500";
+    }
+  };
+
+  const handleStatusChange = async (
+    appointmentId: string,
+    newStatus: string
+  ): Promise<void> => {
+    try {
+      // Convert frontend status to backend status format
+      const backendStatus = newStatus.toUpperCase() as keyof typeof APPOINTMENT_STATUS;
+
+      const response = await fetch(
+        `http://localhost:8080${API_ENDPOINTS.APPOINTMENTS}/${appointmentId}/status?status=${backendStatus}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.ok) {
+        // Update local state
+        setAppointments((prev) =>
+          prev.map((apt) =>
+            apt.id === appointmentId
+              ? {
+                  ...apt,
+                  status: newStatus as Appointment["status"],
+                }
+              : apt
+          )
+        );
+        setError(null);
+      } else {
+        setError("Failed to update appointment status. Please try again.");
+      }
+    } catch (error) {
+      setError("Network error. Please check your connection and try again.");
+    }
+  };
 
   // Filter appointments based on search and filters
   const filteredAppointments = appointments.filter((appointment) => {
@@ -669,104 +698,17 @@ function AdminAppointments() {
     return filteredAppointments.filter((apt) => apt.date === dateStr);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "CONFIRMED":
-        return "bg-green-500";
-      case "PENDING":
-        return "bg-yellow-500";
-      case "COMPLETED":
-        return "bg-blue-500";
-      case "CANCELLED":
-        return "bg-red-500";
-      default:
-        return "bg-gray-500";
-    }
-  };
-
-  const getStatusTextColor = (status: string) => {
-    switch (status.toUpperCase()) {
-      case "CONFIRMED":
-        return "text-green-400";
-      case "PENDING":
-        return "text-yellow-400";
-      case "COMPLETED":
-        return "text-blue-400";
-      case "CANCELLED":
-        return "text-red-400";
-      default:
-        return "text-gray-400";
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "border-l-red-500";
-      case "medium":
-        return "border-l-yellow-500";
-      case "low":
-        return "border-l-green-500";
-      default:
-        return "border-l-gray-500";
-    }
-  };
-
-  const handleStatusChange = async (
-    appointmentId: string,
-    newStatus: string
-  ) => {
-    try {
-      // Convert frontend status to backend status format
-      const backendStatus = newStatus.toUpperCase() as
-        | "PENDING"
-        | "CONFIRMED"
-        | "CANCELLED"
-        | "COMPLETED";
-
-      const response = await fetch(
-        `http://localhost:8080/api/appointments/${appointmentId}/status?status=${backendStatus}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        // Update local state
-        setAppointments((prev) =>
-          prev.map((apt) =>
-            apt.id === appointmentId
-              ? {
-                  ...apt,
-                  status: newStatus as Appointment["status"],
-                }
-              : apt
-          )
-        );
-      } else {
-        console.error("Failed to update appointment status:", response.status);
-        alert("Failed to update appointment status. Please try again.");
-      }
-    } catch (error) {
-      console.error("Error updating appointment status:", error);
-      alert("Network error. Please check your connection and try again.");
-    }
-  };
-
-  const handleViewAppointment = (appointment: Appointment) => {
+  const handleViewAppointment = (appointment: Appointment): void => {
     setSelectedAppointment(appointment);
     setShowDetailModal(true);
   };
 
-  const handleReschedule = (appointment: Appointment) => {
+  const handleReschedule = (appointment: Appointment): void => {
     setSelectedAppointment(appointment);
     setShowRescheduleModal(true);
   };
 
-  const handleStaffChange = async (appointment: Appointment) => {
+  const handleStaffChange = async (appointment: Appointment): Promise<void> => {
     setSelectedAppointment(appointment);
     setNewStaffId(appointment.staffId || "");
 
@@ -835,6 +777,29 @@ function AdminAppointments() {
   return (
     <div className="min-h-screen bg-[#212121] text-white p-6">
       <div className="max-w-7xl mx-auto">
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <XCircleIcon className="h-5 w-5 text-red-400" />
+              <span className="text-red-100">{error}</span>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300 transition-colors"
+            >
+              <XIcon className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+
+        {/* Loading Indicator */}
+        {loading && (
+          <div className="mb-6 p-4 bg-[#F7BF24]/10 border border-[#F7BF24]/30 rounded-lg flex items-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#F7BF24]"></div>
+            <span className="text-[#F7BF24]">Loading...</span>
+          </div>
+        )}
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
@@ -1662,7 +1627,7 @@ function AdminAppointments() {
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">No staff assigned</option>
-                    {availableStaff.map((staff) => (
+                    {activeStaffList.map((staff: StaffMember) => (
                       <option key={staff.id} value={staff.id}>
                         {staff.name} - {staff.role}
                       </option>
@@ -1750,8 +1715,8 @@ function AdminAppointments() {
                       <div>
                         <span className="text-gray-400">Staff:</span>
                         <span className="text-white ml-2">
-                          {availableStaff.find(
-                            (s) => s.id === newAppointment.staffId
+                          {activeStaffList.find(
+                            (s: StaffMember) => s.id.toString() === newAppointment.staffId
                           )?.name || "Not selected"}
                         </span>
                       </div>
@@ -2031,6 +1996,49 @@ function AdminAppointments() {
                         management.
                       </p>
                     )}
+                  
+                  {/* Show conflicting assignments */}
+                  {availableStaffForSlot.length < activeStaffCount && selectedAppointment && (
+                    <div className="mt-3 p-3 bg-amber-900/20 border border-amber-500/30 rounded-lg">
+                      <h4 className="text-xs font-medium text-amber-400 mb-2 flex items-center gap-2">
+                        <ClockIcon className="h-3 w-3" />
+                        Unavailable Staff ({activeStaffCount - availableStaffForSlot.length} already assigned)
+                      </h4>
+                      <div className="space-y-1">
+                        {activeStaffList
+                          .filter((staff) => {
+                            // Show staff that are already assigned to other appointments at this time
+                            const isAlreadyAssigned = appointments.some((apt) => 
+                              apt.staffId === staff.id.toString() &&
+                              apt.date === selectedAppointment.date &&
+                              apt.time === selectedAppointment.time &&
+                              apt.status !== "CANCELLED" &&
+                              apt.id !== selectedAppointment.id
+                            );
+                            return staff.isActive && isAlreadyAssigned;
+                          })
+                          .map((staff) => {
+                            const conflictingAppointment = appointments.find((apt) => 
+                              apt.staffId === staff.id.toString() &&
+                              apt.date === selectedAppointment.date &&
+                              apt.time === selectedAppointment.time &&
+                              apt.status !== "CANCELLED" &&
+                              apt.id !== selectedAppointment.id
+                            );
+                            
+                            return (
+                              <div key={staff.id} className="text-xs text-amber-300 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 bg-amber-400 rounded-full"></div>
+                                <span className="font-medium">{staff.name}</span>
+                                <span className="text-amber-400/70">
+                                  → {conflictingAppointment?.customerName}
+                                </span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Selected Staff Info */}
