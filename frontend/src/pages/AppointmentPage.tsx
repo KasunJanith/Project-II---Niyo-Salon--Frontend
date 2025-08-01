@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import "../components/CustomDatePicker.css";
@@ -18,13 +18,14 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { adminService, ServiceResponse } from "../services/adminService";
-import { bookingService, AppointmentRequest } from "../services/bookingService";
+import { bookingService } from "../services/bookingService";
 import useUserData from "../hooks/useUserData";
 
 // Helper function to convert 12-hour time to 24-hour format
 function convertTo24Hour(time12h: string) {
   const [time, modifier] = time12h.split(" ");
-  let [hours, minutes] = time.split(":").map(Number);
+  let [hours] = time.split(":").map(Number);
+  const minutes = parseInt(time.split(":")[1]);
 
   if (modifier === "PM" && hours !== 12) {
     hours += 12;
@@ -66,19 +67,13 @@ const getCategoryIcon = (category: string): LucideIcon => {
   }
 };
 
-const availableTimes = [
-  "09:00 AM",
-  "10:00 AM",
-  "11:00 AM",
-  "12:00 PM",
-  "01:00 PM",
-  "02:00 PM",
-  "03:00 PM",
-  "04:00 PM",
-  "05:00 PM",
-  "06:00 PM",
-  "07:00 PM",
-];
+// Available times will be loaded dynamically with capacity information
+type TimeSlot = { 
+  time: string; 
+  available: boolean; 
+  currentBookings: number; 
+  maxCapacity: number; 
+};
 
 const AppointmentPage = () => {
   const userData = useUserData();
@@ -92,6 +87,7 @@ const AppointmentPage = () => {
   const [customerPhone, setCustomerPhone] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [availableTimes, setAvailableTimes] = useState<TimeSlot[]>([]);
 
   // Dynamically generate categories from services
   const categories = ["all", ...Array.from(new Set(services.map(service => service.category)))];
@@ -135,6 +131,89 @@ const AppointmentPage = () => {
     }
   }, [userData]);
 
+  // Load available times for selected date
+  useEffect(() => {
+    const fetchAvailableTimes = async () => {
+      if (!selectedDate) return;
+      try {
+        const dateStr = selectedDate.toISOString().split("T")[0];
+        
+        // Generate standard time slots (9 AM to 7 PM)
+        const standardTimeSlots = [
+          "09:00 AM",
+          "10:00 AM", 
+          "11:00 AM",
+          "12:00 PM",
+          "01:00 PM",
+          "02:00 PM",
+          "03:00 PM",
+          "04:00 PM",
+          "05:00 PM",
+          "06:00 PM",
+          "07:00 PM"
+        ];
+        
+        // Fetch existing appointments for this date to check capacity
+        const appointments = await bookingService.getAppointmentsByDate(dateStr);
+        
+        // Calculate capacity for each time slot based on actual staff availability
+        const timeSlots: TimeSlot[] = await Promise.all(
+          standardTimeSlots.map(async (time) => {
+            const appointmentsAtTime = appointments.filter(apt => {
+              const aptTime24h = apt.time; // Backend stores in 24h format
+              const timeSlot24h = convertTo24Hour(time);
+              return aptTime24h === timeSlot24h;
+            });
+            
+            const currentBookings = appointmentsAtTime.length;
+            
+            // Try to get actual staff capacity from backend
+            // We'll use the checkTimeSlotAvailability method to determine if this slot is available
+            let available = true;
+            try {
+              const timeSlot24h = convertTo24Hour(time);
+              available = await bookingService.checkTimeSlotAvailability({
+                date: dateStr,
+                time: timeSlot24h
+              });
+            } catch (error) {
+              // If we can't check availability, assume it's available for fallback
+              console.warn(`Could not check availability for ${time}:`, error);
+              available = true;
+            }
+            
+            // Estimate capacity based on current bookings and availability
+            // If backend says it's not available, then we've reached capacity
+            const estimatedMaxCapacity = available ? Math.max(currentBookings + 1, 5) : currentBookings;
+            
+            return {
+              time,
+              available,
+              currentBookings,
+              maxCapacity: estimatedMaxCapacity
+            };
+          })
+        );
+        
+        setAvailableTimes(timeSlots);
+      } catch (error) {
+        console.error('Error loading available times:', error);
+        // Fallback: show all time slots as available if we can't fetch appointment data
+        const fallbackTimeSlots: TimeSlot[] = [
+          "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM",
+          "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM"
+        ].map(time => ({
+          time,
+          available: true,
+          currentBookings: 0,
+          maxCapacity: 5
+        }));
+        setAvailableTimes(fallbackTimeSlots);
+      }
+    };
+    fetchAvailableTimes();
+  }, [selectedDate]);
+
   // Calculate subtotal based on selected services
   const subtotal = selectedServices.reduce(
     (total, id) => total + (services.find((s) => s.id === id)?.price || 0),
@@ -155,6 +234,9 @@ const AppointmentPage = () => {
       return;
     }
 
+    // Note: Final availability is determined by backend based on staff capacity
+    // Frontend capacity checking is just for user guidance
+
     const appointmentData = {
       customerName,
       customerPhone,
@@ -168,29 +250,15 @@ const AppointmentPage = () => {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/appointments/book", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(appointmentData),
-      });
-
-      if (response.ok) {
-        alert("Appointment booked successfully!");
-        // Optionally reset form
-        setSelectedServices([]);
-        setSelectedDate(new Date());
-        setSelectedTime("");
-        setNotes("");
-      } else {
-        const error = await response.text();
-        alert("Booking failed: " + error);
-      }
+      await bookingService.bookAppointment(appointmentData);
+      alert("Appointment booked successfully!");
+      // Optionally reset form
+      setSelectedServices([]);
+      setSelectedDate(new Date());
+      setSelectedTime("");
+      setNotes("");
     } catch (err) {
-      alert("Network error: " + err);
+      alert("Booking failed: " + (err as Error).message);
     }
     setLoading(false);
   };
@@ -428,18 +496,43 @@ const AppointmentPage = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-300 mb-4">Available Times</h3>
                   <div className="grid grid-cols-3 gap-3">
-                    {availableTimes.map((time) => (
+                    {availableTimes.map((timeSlot) => (
                       <button
-                        key={time}
-                        onClick={() => setSelectedTime(time)}
+                        key={timeSlot.time}
+                        onClick={() => setSelectedTime(timeSlot.time)}
+                        disabled={!timeSlot.available}
                         className={`py-3 px-4 rounded-lg border-2 text-center font-medium transition-all duration-200 ${
-                          selectedTime === time
+                          selectedTime === timeSlot.time
                             ? "bg-[#F7BF24] text-black border-[#F7BF24]"
+                            : !timeSlot.available
+                            ? "bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed opacity-50"
                             : "bg-[#232323] text-gray-300 border-gray-600 hover:border-[#F7BF24] hover:text-white"
                         }`}
                         type="button"
+                        title={
+                          !timeSlot.available 
+                            ? "This time slot is not available - staff capacity reached" 
+                            : timeSlot.currentBookings > 0
+                            ? `${timeSlot.currentBookings} booking(s) - staff availability confirmed`
+                            : "Available - staff ready to serve"
+                        }
                       >
-                        {time}
+                        <div>
+                          <div>{timeSlot.time}</div>
+                          {!timeSlot.available && (
+                            <div className="text-xs mt-1 text-red-400">Full</div>
+                          )}
+                          {timeSlot.available && timeSlot.currentBookings > 0 && (
+                            <div className="text-xs mt-1 text-yellow-400">
+                              {timeSlot.currentBookings} booked
+                            </div>
+                          )}
+                          {timeSlot.available && timeSlot.currentBookings === 0 && (
+                            <div className="text-xs mt-1 text-green-400">
+                              Available
+                            </div>
+                          )}
+                        </div>
                       </button>
                     ))}
                   </div>
