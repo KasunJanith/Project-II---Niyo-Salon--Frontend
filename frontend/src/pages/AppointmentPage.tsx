@@ -481,13 +481,14 @@ const AppointmentPage = () => {
                 {/* Calendar */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-300 mb-4">Choose Date</h3>
-                  <div className="bg-[#232323] rounded-lg p-4 border border-gray-700">
+                  <div>
                     <DatePicker
                       selected={selectedDate}
                       onChange={(date: Date | null) => setSelectedDate(date)}
                       minDate={new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)}
                       inline
                       className="w-full"
+                      formatWeekDay={name => name.substr(0, 3).toUpperCase()} 
                     />
                   </div>
                 </div>
@@ -501,7 +502,7 @@ const AppointmentPage = () => {
                         key={timeSlot.time}
                         onClick={() => setSelectedTime(timeSlot.time)}
                         disabled={!timeSlot.available}
-                        className={`py-3 px-4 rounded-lg border-2 text-center font-medium transition-all duration-200 ${
+                        className={`relative py-3 px-4 rounded-lg border-2 text-center font-medium transition-all duration-200 ${
                           selectedTime === timeSlot.time
                             ? "bg-[#F7BF24] text-black border-[#F7BF24]"
                             : !timeSlot.available
@@ -517,22 +518,18 @@ const AppointmentPage = () => {
                             : "Available - staff ready to serve"
                         }
                       >
-                        <div>
-                          <div>{timeSlot.time}</div>
-                          {!timeSlot.available && (
-                            <div className="text-xs mt-1 text-red-400">Full</div>
-                          )}
-                          {timeSlot.available && timeSlot.currentBookings > 0 && (
-                            <div className="text-xs mt-1 text-yellow-400">
-                              {timeSlot.currentBookings} booked
-                            </div>
-                          )}
-                          {timeSlot.available && timeSlot.currentBookings === 0 && (
-                            <div className="text-xs mt-1 text-green-400">
-                              Available
-                            </div>
-                          )}
-                        </div>
+                        {/* Time label always visible */}
+                        <div>{timeSlot.time}</div>
+                        {/* Show yellow 'X booked' only for available slots with bookings */}
+                        {timeSlot.available && timeSlot.currentBookings > 0 && (
+                          <div className="text-xs mt-2 text-yellow-400 font-semibold">{timeSlot.currentBookings} booked</div>
+                        )}
+                        {/* Overlay for full slots */}
+                        {!timeSlot.available && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                            <span className="text-sm font-bold text-red-400">N/A</span>
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>
