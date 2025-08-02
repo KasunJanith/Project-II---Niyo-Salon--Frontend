@@ -1,12 +1,12 @@
 /* Custom DatePicker - Premium Design */
 
 .react-datepicker {
-  background: linear-gradient(90deg, #181818 0%, #232323 50%, #181818 100%) !important;
+  background: linear-gradient(120deg, #181818 20%, #232323 60%, #181818 100%) !important;
   border: 1px solid rgba(255, 170, 0, 0.2) !important;
   border-radius: 10px !important;
   color: #FFFFFF !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
-  font-size: 14px !important;
+  font-size: 16px !important;
   box-shadow: 
     0 10px 40px rgba(0, 0, 0, 0.4),
     0 4px 16px rgba(0, 0, 0, 0.2),
@@ -29,20 +29,20 @@
 }
 
 .react-datepicker__header {
-  background: #181818 !important;
+  background: #fcb901c7 !important;
   border-bottom: 1px solid rgba(255, 170, 0, 0.15) !important;
-  padding: 15px 20px 11px !important;
-  border-top-left-radius: 16px !important;
-  border-top-right-radius: 16px !important;
+  padding: 15px 20px 5px !important;
+  border-top-left-radius: 10px !important;
+  border-top-right-radius: 10px !important;
   position: relative !important;
   backdrop-filter: blur(10px) !important;
 }
 
 .react-datepicker__current-month {
-  color: #f7bf24 !important;
+  color: #181818 !important;
   font-weight: 600 !important;
   font-size: 22px !important;
-  margin-bottom: 12px !important;
+  margin-bottom: 5px !important;
   text-align: center !important;
   letter-spacing: 0.5px !important;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
@@ -58,7 +58,7 @@
 }
 
 .react-datepicker__day-name {
-  color: #f7bf24 !important;
+  color: #181818 !important;
   font-weight: 500 !important;
   font-size: 13px !important;
   text-align: center !important;
@@ -85,7 +85,7 @@
   line-height: 1 !important;
   margin: 0 !important;
   border-radius: 8px !important;
-  font-size: 14px !important;
+  font-size: 16px !important;
   font-weight: 500 !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   border: none !important;
@@ -233,7 +233,7 @@
   border-radius: 8px !important;
   padding: 12px 16px !important;
   color: #FFFFFF !important;
-  font-size: 14px !important;
+  font-size: 16px !important;
   transition: all 0.2s ease !important;
   outline: none !important;
 }
