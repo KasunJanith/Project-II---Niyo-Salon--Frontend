@@ -526,7 +526,7 @@ const AppointmentPage = () => {
                         )}
                         {/* Overlay for full slots */}
                         {!timeSlot.available && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20 rounded-lg">
                             <span className="text-sm font-bold text-red-400">N/A</span>
                           </div>
                         )}
