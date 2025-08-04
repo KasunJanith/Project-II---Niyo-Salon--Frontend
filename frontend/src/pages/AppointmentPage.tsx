@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import "../components/CustomDatePicker.css";
@@ -88,6 +89,7 @@ interface AlertModal {
 
 const AppointmentPage = () => {
   const userData = useUserData();
+  const navigate = useNavigate();
   const [services, setServices] = useState<Service[]>([]);
   const [servicesLoading, setServicesLoading] = useState(true);
   const [selectedServices, setSelectedServices] = useState<number[]>([]);
@@ -270,33 +272,23 @@ const AppointmentPage = () => {
       return;
     }
 
-    // Note: Final availability is determined by backend based on staff capacity
-    // Frontend capacity checking is just for user guidance
-
-    const appointmentData = {
+    // Store booking data for payment page
+    const bookingData = {
       customerName,
       customerPhone,
-      services: selectedServices
-        .map((id) => services.find((s) => s.id === id)?.name)
-        .join(","),
-      date: selectedDate.toISOString().split("T")[0], // "YYYY-MM-DD"
-      time: convertTo24Hour(selectedTime), // <-- convert here!
+      services: selectedServices.map((id) => services.find((s) => s.id === id)),
+      date: selectedDate.toISOString().split("T")[0],
+      time: selectedTime,
       notes,
+      subtotal,
+      advance
     };
 
-    setLoading(true);
-    try {
-      await bookingService.bookAppointment(appointmentData);
-      showAlert('success', 'Booking Confirmed!', 'Your appointment has been successfully booked. We look forward to seeing you!');
-      // Optionally reset form
-      setSelectedServices([]);
-      setSelectedDate(new Date());
-      setSelectedTime("");
-      setNotes("");
-    } catch (err) {
-      showAlert('error', 'Booking Failed', `We couldn't process your booking: ${(err as Error).message}`);
-    }
-    setLoading(false);
+    // Store in localStorage to pass to payment page
+    localStorage.setItem('pendingBooking', JSON.stringify(bookingData));
+    
+    // Navigate to payment page
+    navigate('/payment');
   };
 
   // Alert Modal Component
