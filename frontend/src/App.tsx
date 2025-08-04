@@ -11,15 +11,19 @@ import CustomerDashboard from "./pages/dashboard/CustomerDashboard";
 import StaffDashboard from "./pages/dashboard/StaffDashboard";
 import AdminDashboard from "./pages/dashboard/AdminDashboard";
 import AppointmentPage from "./pages/AppointmentPage";
+import PaymentPage from "./pages/PaymentPage";
 import ProfilePage from "./pages/ProfilePage";
 import BlogPage from "./pages/BlogPage";
 import GalleryPage from "./pages/GalleryPage";
 import Layout from "./components/layout/Layout";
 import NotFoundPage from "./pages/NotFoundPage";
 import AddStaffPage from "./pages/dashboard/AddStaffPage";
+import AdminUsers from "./pages/dashboard/Admin/AdminUsers";
+import AdminStaff from "./pages/dashboard/Admin/AdminStaff";
+import AdminServices from "./pages/dashboard/Admin/AdminServices";
+import AdminAppointments from "./pages/dashboard/Admin/AdminAppoinments";
 import { ReactNode, useEffect } from "react";
 import ServicesPage from "./pages/ServicesPage";
-import axios from "axios";
 import useUserData from "./hooks/useUserData";
 import 'aos/dist/aos.css';
 import AOS from "aos"; // <-- Import AOS
@@ -75,6 +79,14 @@ export function App() {
             }
           />
           <Route
+            path="payment"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
+                <PaymentPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="profile"
             element={
               <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
@@ -118,6 +130,46 @@ export function App() {
             element={
               <ProtectedRoute allowedRoles={["admin"]}>
                 <AddStaffPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/users"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminUsers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/adminstaff"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminStaff />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/appointments"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminAppointments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/services"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminServices />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/appointments/new"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminAppointments />
               </ProtectedRoute>
             }
           />
