@@ -13,7 +13,6 @@ import {
   AlertCircleIcon,
   Users2Icon,
   CalendarDaysIcon,
-  ServiceIcon,
   FilterIcon,
   PlusIcon,
   EditIcon,
