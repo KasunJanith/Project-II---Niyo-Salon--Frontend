@@ -27,6 +27,7 @@ import useUserData from "./hooks/useUserData";
 import 'aos/dist/aos.css';
 import AOS from "aos"; // <-- Import AOS
 import AboutUsPage from "./pages/AboutUsPage";
+import AdminUpload from './pages/dashboard/Admin/AdminUpload'; // Adjust path as needed
 
 type ProtectedRouteProps = {
   children: ReactNode;
@@ -166,6 +167,15 @@ export function App() {
             </ProtectedRoute>
           }
         />
+
+      <Route
+        path="/dashboard/admin/gallery-upload"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminUpload />
+          </ProtectedRoute>
+        }
+      />
       </Routes>
     </Router>
   );

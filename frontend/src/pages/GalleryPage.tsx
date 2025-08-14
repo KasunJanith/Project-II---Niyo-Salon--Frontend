@@ -1,110 +1,33 @@
-import { useState } from 'react';
-import { GridIcon, ColumnsIcon, SearchIcon, FilterIcon } from 'lucide-react';
-import galleryBg from '../assets/Gallery/bg-gallery.jpg';
-import img1 from '../assets/Gallery/img1.jpg';
-import img2 from '../assets/Gallery/img2.jpg';
-import img3 from '../assets/Gallery/img3.jpg';
-import img4 from '../assets/Gallery/img4.jpg';
-import img5 from '../assets/Gallery/img5.jpg';
-import img6 from '../assets/Gallery/img6.jpg';
+import React, { useEffect, useState } from 'react';
+
+import { GridIcon, ColumnsIcon } from 'lucide-react'; // Make sure you have these icons or replace with your own
+import galleryBg from '../assets/Gallery/bg-gallery.jpg'; // Update path if needed
+import { fetchGallery } from './dashboard/Admin/AdminUpload';
+
 const GalleryPage = () => {
   const [activeCategory, setActiveCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'columns'
-  // Mock data for gallery items
-  const galleryItems = [
-    {
-      id: 1,
-      title: 'Modern Fade Haircut',
-      description: 'Clean modern fade with textured top',
-      imageUrl: img1,
-      category: 'haircut',
-      stylist: 'Jamie Rodriguez'
-    },
-    {
-      id: 2,
-      title: 'Beard Trim and Shape',
-      description: 'Professional beard grooming and shaping',
-      imageUrl: img2,
-      category: 'beard',
-      stylist: 'Alex Kim'
-    },
-    {
-      id: 3,
-      title: 'Geometric Wolf Tattoo',
-      description: 'Custom geometric wolf design with fine line work',
-      imageUrl: img3,
-      category: 'tattoo',
-      stylist: 'Taylor Morgan'
-    },
-    {
-      id: 4,
-      title: 'Long Hair Styling',
-      description: 'Layered cut with beachy waves',
-      imageUrl: img4,
-      category: 'haircut',
-      stylist: 'Jamie Rodriguez'
-    },
-    {
-      id: 5,
-      title: 'Classic Pompadour',
-      description: 'Timeless pompadour style with modern touch',
-      imageUrl: img5,
-      category: 'haircut',
-      stylist: 'Jamie Rodriguez'
-    },
-    {
-      id: 6,
-      title: 'Full Beard Grooming',
-      description: 'Full beard trim and styling',
-      imageUrl: img6,
-      category: 'beard',
-      stylist: 'Alex Kim'
-    },
-    {
-      id: 7,
-      title: 'Floral Sleeve Tattoo',
-      description: 'Intricate floral design sleeve tattoo',
-      imageUrl: img1,
-      category: 'tattoo',
-      stylist: 'Taylor Morgan'
-    },
-    {
-      id: 8,
-      title: 'Minimalist Linework Tattoo',
-      description: 'Clean, minimalist line work design',
-      imageUrl: img2,
-      category: 'tattoo',
-      stylist: 'Taylor Morgan'
-    },
-    {
-      id: 9,
-      title: 'Textured Crop Haircut',
-      description: 'Short textured crop with clean fade',
-      imageUrl: img3,
-      category: 'haircut',
-      stylist: 'Jamie Rodriguez'
-    }
+  const [viewMode, setViewMode] = useState<'grid' | 'columns'>('grid');
+  const [galleryItems, setGalleryItems] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchGallery().then(setGalleryItems);
+  }, []);
+
+  const categories = [
+    { id: 'all', name: 'All Work' },
+    { id: 'haircut', name: 'Haircuts' },
+    { id: 'beard', name: 'Beard Grooming' },
+    { id: 'tattoo', name: 'Tattoos' }
   ];
-  // Gallery categories
-  const categories = [{
-    id: 'all',
-    name: 'All Work'
-  }, {
-    id: 'haircut',
-    name: 'Haircuts'
-  }, {
-    id: 'beard',
-    name: 'Beard Grooming'
-  }, {
-    id: 'tattoo',
-    name: 'Tattoos'
-  }];
-  // Filter gallery items by category
-  const filteredItems = activeCategory === 'all' ? galleryItems : galleryItems.filter(item => item.category === activeCategory);
+
+  const filteredItems = activeCategory === 'all'
+    ? galleryItems
+    : galleryItems.filter(item => item.category === activeCategory);
+
   return (
     <div className="w-full bg-[#212121] min-h-screen">
       {/* Hero Section */}
-      <section 
+      <section
         className="bg-cover bg-center text-white text-center py-20 relative"
         style={{ backgroundImage: `url(${galleryBg})` }}
       >
@@ -115,7 +38,6 @@ const GalleryPage = () => {
             <div className="w-3 h-3 bg-[#F7BF24] rotate-45"></div>
             <div className="w-16 h-px bg-gradient-to-l from-transparent to-[#F7BF24]"></div>
           </div>
-          
           <p className="font-inter text-[#F7BF24] text-lg tracking-[3px] mb-4 uppercase">
             Our Portfolio
           </p>
@@ -125,7 +47,6 @@ const GalleryPage = () => {
           <p className="text-white/80 text-xl max-w-2xl mx-auto mb-8">
             Discover our masterpieces and get inspired for your next transformation
           </p>
-          
           <div className="flex justify-center items-center gap-8">
             <div className="w-16 h-px bg-gradient-to-r from-transparent to-[#F7BF24]"></div>
             <div className="text-[#F7BF24] text-2xl">✦</div>
@@ -137,7 +58,6 @@ const GalleryPage = () => {
       {/* Main Gallery Section */}
       <section className="bg-[#181818] py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          
           {/* Filters and View Mode Toggle */}
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 gap-6">
             {/* Category Filters */}
@@ -196,13 +116,20 @@ const GalleryPage = () => {
                   }}
                 >
                   <div className="aspect-square overflow-hidden">
-                    <img
-                      src={item.imageUrl}
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                    />
+                    {item.fileType === 'video' ? (
+                      <video
+                        src={`http://localhost:8080${item.fileUrl}`}
+                        controls
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                      />
+                    ) : (
+                      <img
+                        src={`http://localhost:8080${item.fileUrl || item.imageUrl}`}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                      />
+                    )}
                   </div>
-                  
                   {/* Overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-6">
                     <div className="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
@@ -215,7 +142,7 @@ const GalleryPage = () => {
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-[#F7BF24] rounded-full flex items-center justify-center">
                           <span className="text-black font-bold text-xs">
-                            {item.stylist.charAt(0)}
+                            {item.stylist?.charAt(0)}
                           </span>
                         </div>
                         <span className="text-[#F7BF24] text-sm font-semibold">
@@ -224,12 +151,10 @@ const GalleryPage = () => {
                       </div>
                     </div>
                   </div>
-
                   {/* Category Badge */}
                   <div className="absolute top-4 right-4 bg-[#F7BF24] text-black px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                     {item.category}
                   </div>
-
                   {/* Hover Border Effect */}
                   <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-[#F7BF24] to-yellow-400 scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left"></div>
                 </div>
@@ -245,11 +170,19 @@ const GalleryPage = () => {
                     animationDelay: `${index * 100}ms`
                   }}
                 >
-                  <img
-                    src={item.imageUrl}
-                    alt={item.title}
-                    className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
+                  {item.fileType === 'video' ? (
+                    <video
+                      src={`http://localhost:8080${item.fileUrl}`}
+                      controls
+                      className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <img
+                      src={`http://localhost:8080${item.fileUrl || item.imageUrl}`}
+                      alt={item.title}
+                      className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  )}
                   <div className="p-6">
                     <h3 className="font-abril text-white text-xl font-bold mb-2 tracking-wide group-hover:text-[#F7BF24] transition-colors duration-300">
                       {item.title}
@@ -261,7 +194,7 @@ const GalleryPage = () => {
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-[#F7BF24] rounded-full flex items-center justify-center">
                           <span className="text-black font-bold text-xs">
-                            {item.stylist.charAt(0)}
+                            {item.stylist?.charAt(0)}
                           </span>
                         </div>
                         <span className="text-[#F7BF24] text-sm font-semibold">
@@ -329,4 +262,5 @@ const GalleryPage = () => {
     </div>
   );
 };
+
 export default GalleryPage;

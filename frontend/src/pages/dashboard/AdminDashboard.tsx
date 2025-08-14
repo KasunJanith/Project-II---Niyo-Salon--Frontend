@@ -188,6 +188,7 @@ const AdminDashboard = () => {
     { icon: CalendarIcon, label: 'Appointments', count: 0, path: '/dashboard/appointments' }, // Connect to appointments API
     { icon: ScissorsIcon, label: 'Services', count: servicesData.length, path: '/dashboard/services' },
     { icon: BellIcon, label: 'Notifications', count: 5, path: '/dashboard/notifications' },
+    { icon: PlusIcon, label: 'Gallery Upload', path: '/dashboard/admin/gallery-upload' },
     { icon: SettingsIcon, label: 'Settings', path: '/dashboard/settings' }
   ];
 
@@ -240,7 +241,7 @@ const AdminDashboard = () => {
 
   // Real notifications based on recent activity
   const getRecentNotifications = () => {
-    const notifications = [];
+    const notifications: { id: string; type: string; message: string; time: string; read: boolean; }[] = [];
     
     // Add notifications for recent customers
     if (customersData.length > 0) {
