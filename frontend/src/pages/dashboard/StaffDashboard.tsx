@@ -1,56 +1,113 @@
-import React, { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  UserIcon, 
   CalendarIcon, 
   ClockIcon, 
   CheckCircleIcon,
   XCircleIcon,
-  BellIcon,
   MenuIcon,
   XIcon,
   LogOutIcon,
-  Users2Icon,
-  ScissorsIcon,
   ToggleLeftIcon,
   ToggleRightIcon,
-  SettingsIcon
+  SettingsIcon,
+  DollarSignIcon,
+  PhoneIcon,
+  AlertCircleIcon
 } from 'lucide-react';
 import logo from '../../assets/Niyo Logo.jpg';
 import useUserData from '../../hooks/useUserData';
+import { AppointmentBooking, appointmentService, services, staffMembers, formatTimeForDisplay } from '../../services/appointmentService';
+import { bookingService, AppointmentResponse } from '../../services/bookingService';
 
 const StaffDashboard = () => {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAvailable, setIsAvailable] = useState(true);
-  const [showAvailabilitySettings, setShowAvailabilitySettings] = useState(false);
+  const [todaysAppointments, setTodaysAppointments] = useState<AppointmentBooking[]>([]);
+  const [backendAppointments, setBackendAppointments] = useState<AppointmentResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [updatingAppointment, setUpdatingAppointment] = useState<string | null>(null);
+  
   const user = useUserData();
+  const isStaff = user.role === 'STAFF';
 
-  // Simple appointments data
-  const todaysAppointments = [
-    {
-      id: 1,
-      clientName: 'Sarah Johnson',
-      service: 'Haircut',
-      time: '10:00 AM',
-      status: 'upcoming'
-    },
-    {
-      id: 2,
-      clientName: 'Michael Chen',
-      service: 'Beard Trim',
-      time: '11:00 AM',
-      status: 'in-progress'
+  // Get current staff member data
+  const currentStaff = staffMembers.find(staff => 
+    staff.name.toLowerCase().includes(user.username?.toLowerCase() || '') ||
+    staff.id === `staff-${user.id}`
+  ) || staffMembers[0]; // Fallback to first staff member
+
+  const loadAppointments = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      // Try to get appointments from backend first
+      try {
+        const backendData = await bookingService.getAppointmentsByDate(today);
+        setBackendAppointments(backendData);
+      } catch (backendError) {
+        console.log('Backend not available, using local data:', backendError);
+      }
+      
+      // Get local appointments (always available as fallback)
+      const localAppointments = await appointmentService.getAppointmentsByDate(today);
+      
+      // Filter appointments for current staff member if logged in as staff
+      let filteredAppointments = localAppointments;
+      if (isStaff && currentStaff) {
+        filteredAppointments = localAppointments.filter(apt => 
+          apt.staffId === currentStaff.id || apt.staffName === currentStaff.name
+        );
+      }
+      
+      // Sort by time
+      filteredAppointments.sort((a, b) => a.time.localeCompare(b.time));
+      
+      setTodaysAppointments(filteredAppointments);
+    } catch (err) {
+      setError('Failed to load appointments');
+      console.error('Error loading appointments:', err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  }, [isStaff, currentStaff]);
 
-  // Simple metrics
-  const keyMetrics = [
-    { title: 'Today\'s Appointments', value: 3, icon: CalendarIcon, color: 'text-blue-400' },
-    { title: 'Active Clients', value: 12, icon: Users2Icon, color: 'text-green-400' },
-    { title: 'Services Today', value: 8, icon: ScissorsIcon, color: 'text-purple-400' },
-    { title: 'Working Hours', value: '8h', icon: ClockIcon, color: 'text-[#F7BF24]' }
-  ];
+  // Load appointments on component mount
+  useEffect(() => {
+    loadAppointments();
+    // Set up interval to refresh appointments every 30 seconds
+    const interval = setInterval(loadAppointments, 30000);
+    return () => clearInterval(interval);
+  }, [loadAppointments]);
+
+  // Calculate key metrics from real data
+  const calculateMetrics = () => {
+    const completed = todaysAppointments.filter(apt => apt.status === 'COMPLETED').length;
+    const revenue = todaysAppointments
+      .filter(apt => apt.status === 'COMPLETED')
+      .reduce((sum, apt) => sum + (apt.servicePrice || 0), 0);
+    
+    const totalWorkingHours = todaysAppointments
+      .filter(apt => apt.status === 'COMPLETED')
+      .reduce((sum, apt) => {
+        const service = services.find(s => s.name === apt.service);
+        return sum + (service ? service.duration / 60 : 1);
+      }, 0);
+    
+    return [
+      { title: 'Today\'s Appointments', value: todaysAppointments.length, icon: CalendarIcon, color: 'text-blue-400' },
+      { title: 'Completed Today', value: completed, icon: CheckCircleIcon, color: 'text-green-400' },
+      { title: 'Revenue Earned', value: `$${revenue}`, icon: DollarSignIcon, color: 'text-purple-400' },
+      { title: 'Working Hours', value: `${totalWorkingHours.toFixed(1)}h`, icon: ClockIcon, color: 'text-[#F7BF24]' }
+    ];
+  };
+
+  const keyMetrics = calculateMetrics();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -80,7 +137,73 @@ const StaffDashboard = () => {
       }
     } catch (error) {
       console.error('Error updating availability:', error);
-      alert('Error updating availability');
+      // Update locally even if backend fails
+      setIsAvailable(!isAvailable);
+      alert(`You are now ${!isAvailable ? 'Available' : 'Unavailable'} for appointments (Local update only)`);
+    }
+  };
+
+  const updateAppointmentStatus = async (appointmentId: string, newStatus: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED') => {
+    try {
+      setUpdatingAppointment(appointmentId);
+      
+      // Try backend update first
+      const appointment = todaysAppointments.find(apt => apt.id === appointmentId);
+      if (appointment) {
+        // Try updating via bookingService if it has a numeric ID
+        if (backendAppointments.length > 0) {
+          const backendApt = backendAppointments.find(apt => 
+            apt.customerName === appointment.customerName && 
+            apt.time === appointment.time
+          );
+          if (backendApt) {
+            try {
+              await bookingService.updateAppointmentStatus(backendApt.id, newStatus);
+            } catch (backendError) {
+              console.log('Backend update failed, updating locally:', backendError);
+            }
+          }
+        }
+        
+        // Update locally
+        await appointmentService.updateAppointment(appointmentId, { status: newStatus });
+        
+        // Reload appointments to reflect changes
+        await loadAppointments();
+        
+        const actions = {
+          'CONFIRMED': 'confirmed',
+          'CANCELLED': 'cancelled', 
+          'COMPLETED': 'completed'
+        };
+        
+        alert(`Appointment ${actions[newStatus]} successfully!`);
+      }
+    } catch (error) {
+      console.error('Error updating appointment:', error);
+      alert('Failed to update appointment status');
+    } finally {
+      setUpdatingAppointment(null);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'CONFIRMED': return 'bg-green-500/20 text-green-400';
+      case 'PENDING': return 'bg-blue-500/20 text-blue-400';
+      case 'COMPLETED': return 'bg-purple-500/20 text-purple-400';
+      case 'CANCELLED': return 'bg-red-500/20 text-red-400';
+      default: return 'bg-gray-500/20 text-gray-400';
+    }
+  };
+
+  const getStatusDisplay = (status: string) => {
+    switch (status) {
+      case 'CONFIRMED': return 'Confirmed';
+      case 'PENDING': return 'Pending';
+      case 'COMPLETED': return 'Completed';
+      case 'CANCELLED': return 'Cancelled';
+      default: return status;
     }
   };
 
@@ -132,6 +255,12 @@ const StaffDashboard = () => {
                 {isAvailable ? 'Available' : 'Unavailable'}
               </span>
             </div>
+            {currentStaff && (
+              <div className="mt-2 text-xs text-gray-400">
+                <p>{currentStaff.name}</p>
+                <p>{currentStaff.role}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -151,39 +280,18 @@ const StaffDashboard = () => {
 
       {/* Main Content */}
       <div className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-64'} flex-1`}>
-        {/* Header */}
-        <header className="bg-[#181818] border-b border-gray-700 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white">Staff Dashboard</h1>
-              <p className="text-gray-400 mt-1">Welcome back, {user.username || 'Staff Member'}!</p>
-            </div>
-            <div className="flex items-center space-x-3">
-              {/* Availability Status */}
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${
-                  isAvailable ? 'bg-green-400' : 'bg-red-400'
-                }`}></div>
-                <span className="text-sm text-gray-400">
-                  {isAvailable ? 'Available' : 'Unavailable'}
-                </span>
-              </div>
-              
-              <div className="text-right">
-                <p className="text-white text-sm font-medium">
-                  {user.username ? user.username.charAt(0).toUpperCase() + user.username.slice(1) : 'Staff'}
-                </p>
-                <p className="text-gray-400 text-xs">Staff Member</p>
-              </div>
-              <div className="w-10 h-10 bg-[#F7BF24] rounded-full flex items-center justify-center">
-                <UserIcon size={20} className="text-black" />
-              </div>
-            </div>
-          </div>
-        </header>
-
         {/* Dashboard Content */}
         <main className="p-6">
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
+              <div className="flex items-center space-x-2">
+                <AlertCircleIcon size={20} className="text-red-400" />
+                <p className="text-red-400">{error}</p>
+              </div>
+            </div>
+          )}
+
           {/* Availability Card */}
           <div className="bg-[#181818] rounded-xl border border-gray-700 mb-6">
             <div className="p-6">
@@ -237,49 +345,109 @@ const StaffDashboard = () => {
 
           {/* Today's Appointments */}
           <div className="bg-[#181818] rounded-xl border border-gray-700">
-            <div className="p-6 border-b border-gray-700">
+            <div className="p-6 border-b border-gray-700 flex items-center justify-between">
               <h2 className="text-xl font-bold text-white">Today's Appointments</h2>
+              <button
+                onClick={loadAppointments}
+                disabled={loading}
+                className="px-3 py-1 bg-[#F7BF24] text-black rounded-lg hover:bg-[#F7BF24]/80 transition-colors text-sm font-medium disabled:opacity-50"
+              >
+                {loading ? 'Loading...' : 'Refresh'}
+              </button>
             </div>
             <div className="p-6">
-              <div className="space-y-4">
-                {todaysAppointments.map((appointment) => (
-                  <div key={appointment.id} className="bg-[#232323] rounded-lg p-4 border border-gray-700">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-[#F7BF24] rounded-full flex items-center justify-center text-black font-bold">
-                          {appointment.clientName.charAt(0).toUpperCase()}
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F7BF24]"></div>
+                </div>
+              ) : todaysAppointments.length === 0 ? (
+                <div className="text-center py-8">
+                  <CalendarIcon size={48} className="mx-auto text-gray-600 mb-4" />
+                  <p className="text-gray-400">No appointments scheduled for today</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {todaysAppointments.map((appointment) => (
+                    <div key={appointment.id} className="bg-[#232323] rounded-lg p-4 border border-gray-700">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 bg-[#F7BF24] rounded-full flex items-center justify-center text-black font-bold">
+                            {appointment.customerName.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-white">{appointment.customerName}</h4>
+                            <p className="text-sm text-gray-400">{appointment.service}</p>
+                            <div className="flex items-center space-x-4 mt-1">
+                              <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                <PhoneIcon size={12} />
+                                <span>{appointment.customerPhone}</span>
+                              </div>
+                              {appointment.servicePrice && (
+                                <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                  <DollarSignIcon size={12} />
+                                  <span>${appointment.servicePrice}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-semibold text-white">{appointment.clientName}</h4>
-                          <p className="text-sm text-gray-400">{appointment.service}</p>
+                        <div className="flex items-center space-x-3">
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-white">
+                              {formatTimeForDisplay(appointment.time)}
+                            </p>
+                            {appointment.serviceDuration && (
+                              <p className="text-xs text-gray-400">{appointment.serviceDuration}</p>
+                            )}
+                          </div>
+                          <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(appointment.status || 'PENDING')}`}>
+                            {getStatusDisplay(appointment.status || 'PENDING')}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-white">{appointment.time}</p>
+                      
+                      {appointment.notes && (
+                        <div className="mb-3 p-2 bg-[#2a2a2a] rounded text-sm text-gray-300">
+                          <strong>Notes:</strong> {appointment.notes}
                         </div>
-                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          appointment.status === 'upcoming' ? 'bg-blue-500/20 text-blue-400' :
-                          appointment.status === 'in-progress' ? 'bg-green-500/20 text-green-400' :
-                          'bg-gray-500/20 text-gray-400'
-                        }`}>
-                          {appointment.status}
-                        </div>
+                      )}
+                      
+                      <div className="flex space-x-2">
+                        {appointment.status === 'PENDING' && (
+                          <button 
+                            onClick={() => appointment.id && updateAppointmentStatus(appointment.id, 'CONFIRMED')}
+                            disabled={updatingAppointment === appointment.id}
+                            className="bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded-md text-sm transition-colors disabled:opacity-50"
+                          >
+                            <CheckCircleIcon size={14} className="inline mr-1" />
+                            Confirm
+                          </button>
+                        )}
+                        {(appointment.status === 'CONFIRMED' || appointment.status === 'PENDING') && (
+                          <button 
+                            onClick={() => appointment.id && updateAppointmentStatus(appointment.id, 'COMPLETED')}
+                            disabled={updatingAppointment === appointment.id}
+                            className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded-md text-sm transition-colors disabled:opacity-50"
+                          >
+                            <CheckCircleIcon size={14} className="inline mr-1" />
+                            Complete
+                          </button>
+                        )}
+                        {appointment.status !== 'CANCELLED' && appointment.status !== 'COMPLETED' && (
+                          <button 
+                            onClick={() => appointment.id && updateAppointmentStatus(appointment.id, 'CANCELLED')}
+                            disabled={updatingAppointment === appointment.id}
+                            className="bg-red-700 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm transition-colors disabled:opacity-50"
+                          >
+                            <XCircleIcon size={14} className="inline mr-1" />
+                            Cancel
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="mt-3 flex space-x-2">
-                      <button className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded-md text-sm transition-colors">
-                        <CheckCircleIcon size={14} className="inline mr-1" />
-                        Start
-                      </button>
-                      <button className="bg-red-700 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm transition-colors">
-                        <XCircleIcon size={14} className="inline mr-1" />
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </main>
