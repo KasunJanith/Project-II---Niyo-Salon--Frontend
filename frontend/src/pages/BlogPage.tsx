@@ -70,8 +70,8 @@ const BlogPage = () => {
         
     ];
 
-    const genericImageUrl = "https://placehold.co/800x480/A78BFA/ffffff?text=AI Salon Tips";
-    const genericAuthorImage = "https://placehold.co/100x100/5B21B6/ffffff?text=AI";
+    const genericImageUrl = "https://placehold.co/800x480/040301/ffffff?text=AI Salon Tips";
+    const genericAuthorImage = "https://placehold.co/100x100/7C3AED/ffffff?text=AI";
     const genericAuthorRole = "AI Content Creator";
     const genericCategoryName = "AI Content";
 
@@ -95,21 +95,15 @@ const BlogPage = () => {
                 if (!category || category === "ai-content") {
                     const text = (post.title + " " + post.content).toLowerCase();
                     if (text.includes("hair")) category = "hair";
-                    else if (text.includes("tattoo")) category = "tattoo";
-                    else if (text.includes("grooming")) category = "grooming";
-                    else category = "ai-content";
+        else if (text.includes("tattoo") || text.includes("ink") || text.includes("tattoos")) category = "tattoo";
+        else category = "ai-content";
                 }
-                // Use post.imageUrl from backend, or fallback to a generated image
-                const imageUrl = post.imageUrl
-                    ? post.imageUrl
-                    : `https://source.unsplash.com/800x480/?${encodeURIComponent(post.title.split(' ').slice(0,2).join(','))},salon`;
-
                 return {
                     id: post.id,
                     title: post.title,
                     content: post.content,
                     excerpt: post.content ? post.content.substring(0, 150) + (post.content.length > 150 ? '...' : '') : '',
-                    imageUrl, // <-- use the generated or backend image
+                    imageUrl: genericImageUrl,
                     author: post.author || 'AI Generated',
                     authorRole: genericAuthorRole,
                     authorImage: genericAuthorImage,
