@@ -99,12 +99,17 @@ const BlogPage = () => {
                     else if (text.includes("grooming")) category = "grooming";
                     else category = "ai-content";
                 }
+                // Use post.imageUrl from backend, or fallback to a generated image
+                const imageUrl = post.imageUrl
+                    ? post.imageUrl
+                    : `https://source.unsplash.com/800x480/?${encodeURIComponent(post.title.split(' ').slice(0,2).join(','))},salon`;
+
                 return {
                     id: post.id,
                     title: post.title,
                     content: post.content,
                     excerpt: post.content ? post.content.substring(0, 150) + (post.content.length > 150 ? '...' : '') : '',
-                    imageUrl: genericImageUrl,
+                    imageUrl, // <-- use the generated or backend image
                     author: post.author || 'AI Generated',
                     authorRole: genericAuthorRole,
                     authorImage: genericAuthorImage,
