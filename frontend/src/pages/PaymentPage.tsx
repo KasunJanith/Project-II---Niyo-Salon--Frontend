@@ -14,6 +14,7 @@ import {
   CheckCircleIcon
 } from 'lucide-react';
 import { bookingService } from '../services/bookingService';
+import useUserData from '../hooks/useUserData';
 
 // Helper function to convert 12-hour time to 24-hour format
 function convertTo24Hour(time12h: string) {
@@ -69,6 +70,7 @@ interface AlertModal {
 
 const PaymentPage = () => {
   const navigate = useNavigate();
+  const userData = useUserData();
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -242,6 +244,7 @@ const PaymentPage = () => {
         date: paymentData.date,
         time: convertTo24Hour(paymentData.time),
         notes: paymentData.notes || "",
+        userId: userData?.id || undefined, // Add the customer's user ID
       };
 
       await bookingService.bookAppointment(appointmentData);

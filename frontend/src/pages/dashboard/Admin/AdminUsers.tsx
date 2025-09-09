@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAlert } from '../../../hooks/useAlert';
+import AlertBox from '../../../components/ui/AlertBox';
 
 interface ApiUser {
   id: number;
@@ -52,6 +54,8 @@ interface Customer {
 
 const AdminUsers = () => {
   const navigate = useNavigate();
+  const { showSuccess, showError, alert, hideAlert } = useAlert();
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortField, setSortField] = useState('name');
@@ -147,13 +151,14 @@ const AdminUsers = () => {
         await loadCustomers();
         setShowAddModal(false);
         setFormData({ name: '', email: '', phone: '', address: '' });
+        showSuccess('Customer Added!', 'New customer has been successfully added to the system.');
       } else {
         console.error('Failed to add customer:', response.status, response.statusText);
-        alert('Failed to add customer. Please try again.');
+        showError('Add Failed', 'Failed to add customer. Please try again.');
       }
     } catch (error) {
       console.error('Error adding customer:', error);
-      alert('Error adding customer. Please try again.');
+      showError('Add Error', 'Error adding customer. Please check your connection and try again.');
     }
   };
 
@@ -183,13 +188,14 @@ const AdminUsers = () => {
         setShowEditModal(false);
         setSelectedCustomer(null);
         setFormData({ name: '', email: '', phone: '', address: '' });
+        showSuccess('Customer Updated!', 'Customer information has been successfully updated.');
       } else {
         console.error('Failed to update customer:', response.status, response.statusText);
-        alert('Failed to update customer. Please try again.');
+        showError('Update Failed', 'Failed to update customer. Please try again.');
       }
     } catch (error) {
       console.error('Error updating customer:', error);
-      alert('Error updating customer. Please try again.');
+      showError('Update Error', 'Error updating customer. Please check your connection and try again.');
     }
   };
 
@@ -212,13 +218,14 @@ const AdminUsers = () => {
         await loadCustomers();
         setShowDeleteModal(false);
         setSelectedCustomer(null);
+        showSuccess('Customer Deleted!', 'Customer has been successfully deleted.');
       } else {
         console.error('Failed to delete customer:', response.status, response.statusText);
-        alert('Failed to delete customer. Please try again.');
+        showError('Delete Failed', 'Failed to delete customer. Please try again.');
       }
     } catch (error) {
       console.error('Error deleting customer:', error);
-      alert('Error deleting customer. Please try again.');
+      showError('Delete Error', 'Error deleting customer. Please check your connection and try again.');
     }
   };
 
@@ -244,13 +251,14 @@ const AdminUsers = () => {
         // Reload customers list to reflect status changes
         await loadCustomers();
         setSelectedCustomers([]);
+        showSuccess('Status Updated!', 'Customer status has been successfully updated.');
       } else {
         console.error('Some status updates failed');
-        alert('Some status updates failed. Please try again.');
+        showError('Update Failed', 'Some status updates failed. Please try again.');
       }
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Error updating status. Please try again.');
+      showError('Update Error', 'Error updating status. Please check your connection and try again.');
     }
   };
 
@@ -329,6 +337,15 @@ const AdminUsers = () => {
 
   return (
     <div className="min-h-screen bg-[#212121] text-white">
+      <AlertBox
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+        isOpen={alert.isOpen}
+        onClose={hideAlert}
+        autoClose={true}
+        autoCloseDelay={5000}
+      />
       {/* Header */}
       <div className="bg-[#181818] border-b border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between">

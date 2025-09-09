@@ -32,6 +32,8 @@ import {
   adminService,
   type ServiceResponse,
 } from "../../../services/adminService";
+import { useAlert } from '../../../hooks/useAlert';
+import AlertBox from '../../../components/ui/AlertBox';
 
 // International standard interfaces following ISO and best practices
 interface StaffMember {
@@ -80,6 +82,7 @@ const API_ENDPOINTS = {
 } as const;
 
 function AdminAppointments() {
+  const { alert, showWarning, hideAlert } = useAlert();
   // State management following React best practices
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
@@ -786,7 +789,7 @@ function AdminAppointments() {
       const staffId = parseInt(newStaffId);
 
       if (isNaN(staffId)) {
-        alert("Please select a valid staff member.");
+        showWarning("Invalid Selection", "Please select a valid staff member.");
         return;
       }
 
@@ -802,7 +805,7 @@ function AdminAppointments() {
         setAvailableStaffForSlot([]); // Clear the available staff cache
       }
     } else {
-      alert("Please select a staff member.");
+      showWarning("No Selection", "Please select a staff member.");
     }
   };
 
@@ -844,6 +847,15 @@ function AdminAppointments() {
 
   return (
     <div className="min-h-screen bg-[#212121] text-white p-6">
+      <AlertBox
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+        isOpen={alert.isOpen}
+        onClose={hideAlert}
+        autoClose={true}
+        autoCloseDelay={5000}
+      />
       <div className="max-w-7xl mx-auto">
         {/* Error Message */}
         {error && (
