@@ -1,18 +1,58 @@
-import React, { useState } from 'react';
-import { ArrowLeftIcon, PlusIcon, XIcon, UploadCloudIcon, ImageIcon, VideoIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeftIcon, PlusIcon, XIcon, UploadCloudIcon, ImageIcon, VideoIcon, Trash2Icon, EditIcon, SaveIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export async function fetchGallery() {
-  const res = await fetch('http://localhost:8080/api/gallery');
-  return res.json();
+  try {
+    const res = await fetch('http://localhost:8080/api/gallery');
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+  } catch (error) {
+    console.error('Error fetching gallery:', error);
+    return [];
+  }
 }
 
 export async function uploadGalleryItem(formData: FormData) {
-  const res = await fetch('http://localhost:8080/api/gallery', {
-    method: 'POST',
-    body: formData,
-  });
-  return res.json();
+  try {
+    const res = await fetch('http://localhost:8080/api/gallery', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+  } catch (error) {
+    console.error('Error uploading gallery item:', error);
+    throw error;
+  }
+}
+
+export async function deleteGalleryItem(id: number) {
+  try {
+    const res = await fetch(`http://localhost:8080/api/gallery/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return true;
+  } catch (error) {
+    console.error('Error deleting gallery item:', error);
+    return false;
+  }
+}
+
+export async function updateGalleryItem(id: number, data: any) {
+  try {
+    const res = await fetch(`http://localhost:8080/api/gallery/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return await res.json();
+  } catch (error) {
+    console.error('Error updating gallery item:', error);
+    throw error;
+  }
 }
 
 const AdminUpload = () => {
@@ -24,6 +64,18 @@ const AdminUpload = () => {
   const [stylist, setStylist] = useState('');
   const [message, setMessage] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+
+  // Gallery items state
+  const [galleryItems, setGalleryItems] = useState<any[]>([]);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCategory, setEditCategory] = useState('haircut');
+  const [editStylist, setEditStylist] = useState('');
+
+  useEffect(() => {
+    fetchGallery().then(setGalleryItems);
+  }, [message]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +97,52 @@ const AdminUpload = () => {
       setShowPreview(false);
     } catch {
       setMessage('Upload failed.');
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (window.confirm('Are you sure you want to delete this item?')) {
+      console.log('Deleting item with ID:', id);
+      try {
+        const success = await deleteGalleryItem(id);
+        if (success) {
+          setMessage('Deleted successfully!');
+          setGalleryItems((items) => items.filter((item) => item.id !== id));
+        } else {
+          setMessage('Delete failed.');
+        }
+      } catch (error) {
+        setMessage('Delete failed.');
+        console.error('Delete error:', error);
+      }
+    }
+  };
+
+  const handleEdit = (item: any) => {
+    setEditId(item.id);
+    setEditTitle(item.title);
+    setEditDescription(item.description);
+    setEditCategory(item.category);
+    setEditStylist(item.stylist);
+  };
+
+  const handleSaveEdit = async (id: number) => {
+    try {
+      const updated = await updateGalleryItem(id, {
+        title: editTitle,
+        description: editDescription,
+        category: editCategory,
+        stylist: editStylist,
+      });
+      console.log('Updated item:', updated);
+      setMessage('Updated successfully!');
+      setGalleryItems((items) =>
+        items.map((item) => (item.id === id ? updated : item))
+      );
+      setEditId(null);
+    } catch (error) {
+      setMessage('Update failed.');
+      console.error('Save edit error:', error);
     }
   };
 
@@ -197,6 +295,96 @@ const AdminUpload = () => {
               {message}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Gallery List */}
+      <div className="max-w-2xl mx-auto mt-10">
+        <h2 className="text-xl font-bold mb-4 text-[#F7BF24]">Uploaded Gallery Items</h2>
+        <div className="space-y-6">
+          {galleryItems.map(item => (
+            <div key={item.id} className="bg-[#181818] border border-gray-700 rounded-lg p-4 flex items-center gap-4">
+              <div>
+                {item.fileType === 'image' ? (
+                  <img
+                    src={`http://localhost:8080${item.fileUrl}`}
+                    alt={item.title}
+                    className="w-20 h-20 object-cover rounded border border-gray-600"
+                  />
+                ) : (
+                  <video
+                    src={`http://localhost:8080${item.fileUrl}`}
+                    controls
+                    className="w-20 h-20 object-cover rounded border border-gray-600"
+                  />
+                )}
+              </div>
+              <div className="flex-1">
+                {editId === item.id ? (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      className="w-full p-2 border border-gray-600 rounded-lg bg-[#232323] text-white"
+                    />
+                    <textarea
+                      value={editDescription}
+                      onChange={e => setEditDescription(e.target.value)}
+                      className="w-full p-2 border border-gray-600 rounded-lg bg-[#232323] text-white"
+                      rows={2}
+                    />
+                    <input
+                      type="text"
+                      value={editStylist}
+                      onChange={e => setEditStylist(e.target.value)}
+                      className="w-full p-2 border border-gray-600 rounded-lg bg-[#232323] text-white"
+                    />
+                    <select
+                      value={editCategory}
+                      onChange={e => setEditCategory(e.target.value)}
+                      className="w-full p-2 border border-gray-600 rounded-lg bg-[#232323] text-white"
+                    >
+                      <option value="haircut">Haircut</option>
+                      <option value="beard">Beard</option>
+                      <option value="tattoo">Tattoo</option>
+                    </select>
+                  </div>
+                ) : (
+                  <>
+                    <div className="font-bold text-lg">{item.title}</div>
+                    <div className="text-gray-300 text-sm">{item.description}</div>
+                    <div className="text-xs text-[#F7BF24] mt-1">{item.stylist} • {item.category}</div>
+                  </>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                {editId === item.id ? (
+                  <button
+                    onClick={() => handleSaveEdit(item.id)}
+                    className="p-2 bg-[#F7BF24] text-black rounded-lg flex items-center justify-center hover:bg-yellow-400"
+                  >
+                    <SaveIcon size={16} />
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => handleEdit(item)}
+                      className="p-2 bg-[#232323] border border-gray-600 rounded-lg text-gray-300 hover:bg-[#2a2a2a] flex items-center justify-center"
+                    >
+                      <EditIcon size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      className="p-2 bg-[#232323] border border-gray-600 rounded-lg text-red-400 hover:bg-red-700 flex items-center justify-center"
+                    >
+                      <Trash2Icon size={16} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
