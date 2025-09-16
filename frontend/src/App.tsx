@@ -25,9 +25,10 @@ import { ReactNode, useEffect } from "react";
 import ServicesPage from "./pages/ServicesPage";
 import useUserData from "./hooks/useUserData";
 import 'aos/dist/aos.css';
-import AOS from "aos"; // <-- Import AOS
+import AOS from "aos"; //  Import AOS
 import AboutUsPage from "./pages/AboutUsPage";
-import AdminUpload from './pages/dashboard/Admin/AdminUpload'; // Adjust path as needed
+import AdminUpload from './pages/dashboard/Admin/AdminUpload';
+import VirtualTryOnPage from './pages/VirtualTryOnPage';
 
 type ProtectedRouteProps = {
   children: ReactNode;
@@ -91,6 +92,7 @@ export function App() {
           <Route path="blog" element={<BlogPage />} />
           <Route path="aboutus" element={<AboutUsPage />} />
           <Route path="gallery" element={<GalleryPage />} />
+          <Route path="virtual-try-on" element={<VirtualTryOnPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
 
