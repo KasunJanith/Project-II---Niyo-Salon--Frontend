@@ -37,9 +37,9 @@ const VirtualTryOnPage = () => {
     const loadModels = async () => {
       await tf.ready();
       await tf.setBackend('webgl');
-      await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-      await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-      await faceapi.nets.ageGenderNet.loadFromUri('/models');
+      await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
+      await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
+      await faceapi.nets.ageGenderNet.loadFromUri('./models');
 
       selfieSegmentation.current = new SelfieSegmentation({
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
