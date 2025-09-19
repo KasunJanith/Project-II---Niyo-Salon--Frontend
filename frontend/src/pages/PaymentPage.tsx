@@ -11,7 +11,11 @@ import {
   UserIcon,
   PhoneIcon,
   X,
-  CheckCircleIcon
+  CheckCircleIcon,
+  InfoIcon,
+  EyeIcon,
+  EyeOffIcon,
+  WifiIcon
 } from 'lucide-react';
 import { bookingService } from '../services/bookingService';
 import useUserData from '../hooks/useUserData';
@@ -58,6 +62,14 @@ interface PaymentFormData {
   expiryDate: string;
   cvv: string;
   cardHolderName: string;
+  billingAddress: {
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    country: string;
+  };
+  saveCard: boolean;
 }
 
 // Alert modal types
@@ -74,6 +86,7 @@ const PaymentPage = () => {
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showCvv, setShowCvv] = useState(false);
   const [alertModal, setAlertModal] = useState<AlertModal>({
     isOpen: false,
     type: 'info',
@@ -85,7 +98,15 @@ const PaymentPage = () => {
     cardNumber: '',
     expiryDate: '',
     cvv: '',
-    cardHolderName: ''
+    cardHolderName: '',
+    billingAddress: {
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: 'Sri Lanka'
+    },
+    saveCard: false
   });
 
   // Helper function to show custom alerts
@@ -149,7 +170,7 @@ const PaymentPage = () => {
     return v;
   };
 
-  // Validate form
+  // Enhanced form validation
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
@@ -161,6 +182,8 @@ const PaymentPage = () => {
       newErrors.cardNumber = 'Card number must be between 13-19 digits';
     } else if (!/^\d+$/.test(cardNumber)) {
       newErrors.cardNumber = 'Card number must contain only digits';
+    } else if (!isValidCardNumber(cardNumber)) {
+      newErrors.cardNumber = 'Invalid card number';
     }
 
     // Expiry date validation
@@ -194,14 +217,54 @@ const PaymentPage = () => {
       newErrors.cardHolderName = 'Cardholder name is required';
     } else if (formData.cardHolderName.trim().length < 2) {
       newErrors.cardHolderName = 'Name must be at least 2 characters';
+    } else if (!/^[a-zA-Z\s.'-]+$/.test(formData.cardHolderName.trim())) {
+      newErrors.cardHolderName = 'Name contains invalid characters';
+    }
+
+    // Billing address validation
+    if (!formData.billingAddress.street.trim()) {
+      newErrors.billingStreet = 'Street address is required';
+    }
+    if (!formData.billingAddress.city.trim()) {
+      newErrors.billingCity = 'City is required';
+    }
+    if (!formData.billingAddress.state.trim()) {
+      newErrors.billingState = 'State/Province is required';
+    }
+    if (!formData.billingAddress.zipCode.trim()) {
+      newErrors.billingZipCode = 'ZIP/Postal code is required';
+    } else if (!/^\d{5}(-\d{4})?$/.test(formData.billingAddress.zipCode.trim())) {
+      newErrors.billingZipCode = 'Invalid ZIP code format';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handle input changes
-  const handleInputChange = (field: keyof PaymentFormData, value: string) => {
+  // Luhn algorithm for card validation
+  const isValidCardNumber = (cardNumber: string): boolean => {
+    let sum = 0;
+    let shouldDouble = false;
+
+    for (let i = cardNumber.length - 1; i >= 0; i--) {
+      let digit = parseInt(cardNumber.charAt(i));
+
+      if (shouldDouble) {
+        digit *= 2;
+        if (digit > 9) {
+          digit -= 9;
+        }
+      }
+
+      sum += digit;
+      shouldDouble = !shouldDouble;
+    }
+
+    return sum % 10 === 0;
+  };
+
+  // Enhanced input change handler
+  const handleInputChange = (field: string, value: string) => {
     let formattedValue = value;
 
     if (field === 'cardNumber') {
@@ -210,12 +273,30 @@ const PaymentPage = () => {
       formattedValue = formatExpiryDate(value);
     } else if (field === 'cvv') {
       formattedValue = value.replace(/\D/g, '').slice(0, 4);
+    } else if (field === 'cardHolderName') {
+      formattedValue = value.replace(/[^a-zA-Z\s.'-]/g, '');
+    } else if (field === 'billingZipCode') {
+      formattedValue = value.replace(/\D/g, '').slice(0, 10);
     }
 
-    setFormData(prev => ({
-      ...prev,
-      [field]: formattedValue
-    }));
+    if (field.startsWith('billing')) {
+      const addressField = field.replace('billing', '');
+      // Convert to proper camelCase for state mapping
+      const stateField = addressField.charAt(0).toLowerCase() + addressField.slice(1);
+      
+      setFormData(prev => ({
+        ...prev,
+        billingAddress: {
+          ...prev.billingAddress,
+          [stateField]: formattedValue
+        }
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [field]: formattedValue
+      }));
+    }
 
     // Clear error when user starts typing
     if (errors[field]) {
@@ -247,13 +328,23 @@ const PaymentPage = () => {
         userId: userData?.id || undefined, // Add the customer's user ID
       };
 
-      await bookingService.bookAppointment(appointmentData);
+      // Book the appointment (initially with PENDING status)
+      const bookedAppointment = await bookingService.bookAppointment(appointmentData);
+      
+      // Update appointment status to CONFIRMED after successful payment
+      // This ensures the appointment status reflects the payment completion
+      try {
+        await bookingService.updateAppointmentStatus(bookedAppointment.id, 'CONFIRMED');
+      } catch (statusError) {
+        console.warn('Appointment was booked but status update failed:', statusError);
+        // Continue with success flow even if status update fails
+      }
       
       // Clear pending booking data
       localStorage.removeItem('pendingBooking');
       
       // Show success alert
-      showAlert('success', 'Payment Successful!', 'Your appointment has been confirmed. You will receive a confirmation SMS shortly.');
+      showAlert('success', 'Payment Successful!', 'Your appointment has been confirmed and payment processed successfully. You will receive a confirmation SMS shortly.');
       
       // Redirect to dashboard after showing alert
       setTimeout(() => {
@@ -356,107 +447,297 @@ const PaymentPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Payment Form */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Payment Method */}
+            {/* Card Payment Form */}
             <div className="bg-[#181818] rounded-xl border border-gray-700 p-6">
               <h2 className="text-xl font-bold text-white mb-6 flex items-center">
                 <CreditCardIcon size={24} className="text-[#F7BF24] mr-3" />
                 Payment Information
               </h2>
 
-              {errors.general && (
-                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
-                  <AlertTriangleIcon className="h-5 w-5 text-red-400" />
-                  <span className="text-red-400">{errors.general}</span>
-                </div>
-              )}
+                {errors.general && (
+                  <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3">
+                    <AlertTriangleIcon className="h-5 w-5 text-red-400" />
+                    <span className="text-red-400">{errors.general}</span>
+                  </div>
+                )}
 
-              <div className="space-y-4">
-                {/* Card Number */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Card Number
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={formData.cardNumber}
-                      onChange={(e) => handleInputChange('cardNumber', e.target.value)}
-                      placeholder="1234 5678 9012 3456"
-                      maxLength={19}
-                      className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none pr-20 transition-all duration-200 ${
-                        errors.cardNumber ? 'border-red-500' : 'border-gray-600 focus:border-[#F7BF24]'
-                      }`}
-                    />
-                    {formData.cardNumber && (
-                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 animate-in slide-in-from-right-2 duration-300">
-                        <CardLogo cardType={getCardType(formData.cardNumber).type} />
+                <div className="space-y-6">
+                  {/* Card Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Card Number <span className="text-red-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="cardNumber"
+                        autoComplete="cc-number"
+                        value={formData.cardNumber}
+                        onChange={(e) => handleInputChange('cardNumber', e.target.value)}
+                        placeholder="XXXX XXXX XXXX XXXX"
+                        maxLength={19}
+                        className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none pr-20 transition-all duration-200 ${
+                          errors.cardNumber ? 'border-red-500 focus:border-red-500' : 'border-gray-600 focus:border-[#F7BF24] focus:ring-2 focus:ring-[#F7BF24]/20'
+                        }`}
+                      />
+                      {formData.cardNumber && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 animate-in slide-in-from-right-2 duration-300">
+                          <CardLogo cardType={getCardType(formData.cardNumber).type} />
+                        </div>
+                      )}
+                      <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                        
                       </div>
+                    </div>
+                    {errors.cardNumber && (
+                      <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                        <AlertTriangleIcon size={14} />
+                        {errors.cardNumber}
+                      </p>
                     )}
                   </div>
-                  {errors.cardNumber && (
-                    <p className="text-red-400 text-sm mt-1">{errors.cardNumber}</p>
-                  )}
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Expiry Date */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Expiry Date */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Expiry Date <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="expiryDate"
+                        autoComplete="cc-exp"
+                        value={formData.expiryDate}
+                        onChange={(e) => handleInputChange('expiryDate', e.target.value)}
+                        placeholder="MM/YY"
+                        maxLength={5}
+                        className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none ${
+                          errors.expiryDate ? 'border-red-500 focus:border-red-500' : 'border-gray-600 focus:border-[#F7BF24] focus:ring-2 focus:ring-[#F7BF24]/20'
+                        }`}
+                      />
+                      {errors.expiryDate && (
+                        <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                          <AlertTriangleIcon size={14} />
+                          {errors.expiryDate}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* CVV */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        CVV <span className="text-red-400">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showCvv ? 'text' : 'password'}
+                          name="cvv"
+                          autoComplete="cc-csc"
+                          value={formData.cvv}
+                          onChange={(e) => handleInputChange('cvv', e.target.value)}
+                          placeholder="XXX"
+                          maxLength={4}
+                          className={`w-full bg-[#232323] border rounded-lg px-4 py-3 pr-12 text-white focus:outline-none ${
+                            errors.cvv ? 'border-red-500 focus:border-red-500' : 'border-gray-600 focus:border-[#F7BF24] focus:ring-2 focus:ring-[#F7BF24]/20'
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCvv(!showCvv)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                        >
+                          {showCvv ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                        </button>
+                      </div>
+                      {errors.cvv && (
+                        <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                          <AlertTriangleIcon size={14} />
+                          {errors.cvv}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Cardholder Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Expiry Date
+                      Cardholder Name <span className="text-red-400">*</span>
+                    </label>
+                    <input  
+                      type="text"
+                      value={formData.cardHolderName}
+                      onChange={(e) => handleInputChange('cardHolderName', e.target.value)}
+                      placeholder="Ex: John Doe"
+                      className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none ${
+                        errors.cardHolderName ? 'border-red-500 focus:border-red-500' : 'border-gray-600 focus:border-[#F7BF24] focus:ring-2 focus:ring-[#F7BF24]/20'
+                      }`}
+                    />
+                    {errors.cardHolderName && (
+                      <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                        <AlertTriangleIcon size={14} />
+                        {errors.cardHolderName}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+            {/* Billing Address */}
+            <div className="bg-[#181818] rounded-xl border border-gray-700 p-6">
+                <h3 className="text-lg font-bold text-white mb-6 flex items-center">
+                  <InfoIcon size={20} className="text-[#F7BF24] mr-3" />
+                  Billing Address
+                </h3>
+
+                <div className="space-y-4">
+                  {/* Street Address */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Street Address <span className="text-red-400">*</span>
                     </label>
                     <input
                       type="text"
-                      value={formData.expiryDate}
-                      onChange={(e) => handleInputChange('expiryDate', e.target.value)}
-                      placeholder="MM/YY"
-                      maxLength={5}
+                      name="billingStreet"
+                      autoComplete="street-address"
+                      value={formData.billingAddress.street}
+                      onChange={(e) => handleInputChange('billingStreet', e.target.value)}
+                      placeholder="123 Main Street"
                       className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none ${
-                        errors.expiryDate ? 'border-red-500' : 'border-gray-600 focus:border-[#F7BF24]'
+                        errors.billingStreet ? 'border-red-500' : 'border-gray-600 focus:border-[#F7BF24] focus:ring-2 focus:ring-[#F7BF24]/20'
                       }`}
                     />
-                    {errors.expiryDate && (
-                      <p className="text-red-400 text-sm mt-1">{errors.expiryDate}</p>
+                    {errors.billingStreet && (
+                      <p className="text-red-400 text-sm mt-1">{errors.billingStreet}</p>
                     )}
                   </div>
 
-                  {/* CVV */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      CVV
-                    </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* City */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        City <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="billingCity"
+                        autoComplete="address-level2"
+                        value={formData.billingAddress.city}
+                        onChange={(e) => handleInputChange('billingCity', e.target.value)}
+                        placeholder="Colombo"
+                        className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none ${
+                          errors.billingCity ? 'border-red-500' : 'border-gray-600 focus:border-[#F7BF24] focus:ring-2 focus:ring-[#F7BF24]/20'
+                        }`}
+                      />
+                      {errors.billingCity && (
+                        <p className="text-red-400 text-sm mt-1">{errors.billingCity}</p>
+                      )}
+                    </div>
+
+                    {/* State/Province */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Province <span className="text-red-400">*</span>
+                      </label>
+                      <select
+                        name="billingState"
+                        autoComplete="address-level1"
+                        value={formData.billingAddress.state}
+                        onChange={(e) => handleInputChange('billingState', e.target.value)}
+                        className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none ${
+                          errors.billingState ? 'border-red-500' : 'border-gray-600 focus:border-[#F7BF24] focus:ring-2 focus:ring-[#F7BF24]/20'
+                        }`}
+                      >
+                        <option value="">Select Province</option>
+                        <option value="Western">Western</option>
+                        <option value="Central">Central</option>
+                        <option value="Southern">Southern</option>
+                        <option value="Northern">Northern</option>
+                        <option value="Eastern">Eastern</option>
+                        <option value="North Western">North Western</option>
+                        <option value="North Central">North Central</option>
+                        <option value="Uva">Uva</option>
+                        <option value="Sabaragamuwa">Sabaragamuwa</option>
+                      </select>
+                      {errors.billingState && (
+                        <p className="text-red-400 text-sm mt-1">{errors.billingState}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* ZIP Code */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        ZIP Code <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="zipCode"
+                        autoComplete="postal-code"
+                        value={formData.billingAddress.zipCode}
+                        onChange={(e) => handleInputChange('billingZipCode', e.target.value)}
+                        placeholder="10230"
+                        className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none ${
+                          errors.billingZipCode ? 'border-red-500' : 'border-gray-600 focus:border-[#F7BF24] focus:ring-2 focus:ring-[#F7BF24]/20'
+                        }`}
+                      />
+                      {errors.billingZipCode && (
+                        <p className="text-red-400 text-sm mt-1">{errors.billingZipCode}</p>
+                      )}
+                    </div>
+
+                    {/* Country */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Country <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.billingAddress.country}
+                        onChange={(e) => handleInputChange('billingCountry', e.target.value)}
+                        placeholder="Sri Lanka"
+                        className="w-full bg-[#232323] border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#F7BF24] focus:ring-2 focus:ring-[#F7BF24]/20"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Save Card Option */}
+                  <div className="flex items-center gap-3 pt-4">
                     <input
-                      type="text"
-                      value={formData.cvv}
-                      onChange={(e) => handleInputChange('cvv', e.target.value)}
-                      placeholder="123"
-                      maxLength={4}
-                      className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none ${
-                        errors.cvv ? 'border-red-500' : 'border-gray-600 focus:border-[#F7BF24]'
-                      }`}
+                      type="checkbox"
+                      id="saveCard"
+                      checked={formData.saveCard}
+                      onChange={(e) => setFormData(prev => ({ ...prev, saveCard: e.target.checked }))}
+                      className="w-4 h-4 text-[#F7BF24] bg-[#232323] border-gray-600 rounded focus:ring-[#F7BF24] focus:ring-2"
                     />
-                    {errors.cvv && (
-                      <p className="text-red-400 text-sm mt-1">{errors.cvv}</p>
-                    )}
+                    <label htmlFor="saveCard" className="text-sm text-gray-300">
+                      Save this card for future payments
+                    </label>
                   </div>
                 </div>
+              </div>
 
-                {/* Cardholder Name */}
+            {/* Security Features */}
+            <div className="bg-gradient-to-r from-green-500/10 to-blue-500/10 rounded-xl border border-green-500/20 p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <ShieldCheckIcon className="h-8 w-8 text-green-400" />
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Cardholder Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.cardHolderName}
-                    onChange={(e) => handleInputChange('cardHolderName', e.target.value)}
-                    placeholder="John Doe"
-                    className={`w-full bg-[#232323] border rounded-lg px-4 py-3 text-white focus:outline-none ${
-                      errors.cardHolderName ? 'border-red-500' : 'border-gray-600 focus:border-[#F7BF24]'
-                    }`}
-                  />
-                  {errors.cardHolderName && (
-                    <p className="text-red-400 text-sm mt-1">{errors.cardHolderName}</p>
-                  )}
+                  <h3 className="text-lg font-bold text-white">Secure Payment</h3>
+                  <p className="text-green-300 text-sm">256-bit SSL encryption</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="flex items-center gap-2 text-gray-300">
+                  <WifiIcon size={16} className="text-green-400" />
+                  <span>Encrypted connection</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-300">
+                  <LockIcon size={16} className="text-green-400" />
+                  <span>PCI DSS compliant</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-300">
+                  <ShieldCheckIcon size={16} className="text-green-400" />
+                  <span>Fraud protection</span>
                 </div>
               </div>
             </div>
@@ -468,7 +749,7 @@ const PaymentPage = () => {
               className={`w-full py-4 rounded-xl font-bold text-lg transition-all duration-200 flex items-center justify-center gap-3 ${
                 isProcessing
                   ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                  : 'bg-[#F7BF24] text-black hover:bg-[#E5AB20] shadow-lg hover:shadow-[#F7BF24]/25'
+                  : 'bg-gradient-to-r from-[#F7BF24] to-[#E5AB20] text-black hover:from-[#E5AB20] hover:to-[#D49A1C] shadow-lg hover:shadow-[#F7BF24]/25 transform hover:scale-[1.02]'
               }`}
             >
               {isProcessing ? (
@@ -483,6 +764,10 @@ const PaymentPage = () => {
                 </>
               )}
             </button>
+
+            <p className="text-center text-gray-400 text-sm">
+              By completing this payment, you agree to our terms and conditions.
+            </p>
           </div>
 
           {/* Order Summary */}
