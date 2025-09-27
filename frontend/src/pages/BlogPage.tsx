@@ -70,8 +70,8 @@ const BlogPage = () => {
         
     ];
 
-    const genericImageUrl = "https://placehold.co/800x480/A78BFA/ffffff?text=AI Salon Tips";
-    const genericAuthorImage = "https://placehold.co/100x100/5B21B6/ffffff?text=AI";
+    const genericImageUrl = "https://placehold.co/800x480/040301/ffffff?text=AI Salon Tips";
+    const genericAuthorImage = "https://placehold.co/100x100/7C3AED/ffffff?text=AI";
     const genericAuthorRole = "AI Content Creator";
     const genericCategoryName = "AI Content";
 
@@ -95,9 +95,8 @@ const BlogPage = () => {
                 if (!category || category === "ai-content") {
                     const text = (post.title + " " + post.content).toLowerCase();
                     if (text.includes("hair")) category = "hair";
-                    else if (text.includes("tattoo")) category = "tattoo";
-                    else if (text.includes("grooming")) category = "grooming";
-                    else category = "ai-content";
+        else if (text.includes("tattoo") || text.includes("ink") || text.includes("tattoos")) category = "tattoo";
+        else category = "ai-content";
                 }
                 return {
                     id: post.id,
