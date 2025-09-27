@@ -163,6 +163,7 @@ export function App() {
           <Route index element={<HomePage />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="register" element={<RegisterPage />} />
+          <Route path="virtual-try-on" element={<VirtualTryOnPage />} />
           <Route
             path="appointments"
             element={
@@ -258,6 +259,14 @@ export function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+        path="/dashboard/admin/gallery-upload"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminUpload />
+          </ProtectedRoute>
+        }
+      />
         </Route>
       </Routes>
     </Router>
