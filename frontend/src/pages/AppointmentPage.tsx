@@ -53,6 +53,15 @@ interface Service {
   available: boolean;
 }
 
+// Add SalonClosure type
+interface SalonClosure {
+  id: number;
+  date: string; // ISO date
+  startTime?: string | null;
+  endTime?: string | null;
+  reason?: string;
+}
+
 // Map category to icon
 const getCategoryIcon = (category: string): LucideIcon => {
   switch (category.toLowerCase()) {
@@ -93,6 +102,29 @@ const AppointmentPage = () => {
   const [customerPhone, setCustomerPhone] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>(availableTimes);
+  const [closures, setClosures] = useState<SalonClosure[]>([]);
+  const [closureMessage, setClosureMessage] = useState<string>("");
+
+  // Helper to get the most relevant closure (today or next upcoming)
+  const getActiveOrUpcomingClosure = () => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    // Find closures for today or in the future
+    const futureClosures = closures
+      .map(c => ({ ...c, dateObj: new Date(c.date + 'T00:00:00') }))
+      .filter(c => c.dateObj >= today)
+      .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+    return futureClosures.length > 0 ? futureClosures[0] : null;
+  };
+
+
+  // Compute fully closed dates for calendar exclusion
+  const fullyClosedDates = closures
+    .filter(c => !c.startTime && !c.endTime)
+    .map(c => new Date(c.date + 'T00:00:00'));
+
+
 
   // Dynamically generate categories from services
   const categories = ["all", ...Array.from(new Set(services.map(service => service.category)))];
@@ -136,6 +168,79 @@ const AppointmentPage = () => {
     }
   }, [userData]);
 
+  // Fetch available time slots when date changes
+  useEffect(() => {
+    if (!selectedDate) return;
+    const fetchSlots = async () => {
+      try {
+        const dateStr = selectedDate.toISOString().split("T")[0];
+        const slots = await bookingService.getAvailableTimeSlots(dateStr);
+        setAvailableTimeSlots(slots);
+      } catch (e) {
+        setAvailableTimeSlots(availableTimes); // fallback: all slots
+      }
+    };
+    fetchSlots();
+  }, [selectedDate]);
+
+  // Fetch closures and set closure message for today or next upcoming closure
+  useEffect(() => {
+    const fetchClosures = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('http://localhost:8080/api/closures', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data: SalonClosure[] = await res.json();
+        setClosures(data);
+        // Find the most relevant closure (today or next upcoming)
+        const closure = (() => {
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          // Find closures for today or in the future
+          const futureClosures = data
+            .map(c => ({ ...c, dateObj: new Date(c.date + 'T00:00:00') }))
+            .filter(c => c.dateObj >= today)
+            .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+          return futureClosures.length > 0 ? futureClosures[0] : null;
+        })();
+        if (closure) {
+          if (closure.startTime && closure.endTime) {
+            setClosureMessage(`Salon will be closed on ${closure.date} from ${closure.startTime} to ${closure.endTime}. ${closure.reason ? 'Reason: ' + closure.reason : ''}`);
+          } else {
+            setClosureMessage(`Salon will be closed for the full day on ${closure.date}. ${closure.reason ? 'Reason: ' + closure.reason : ''}`);
+          }
+        } else {
+          setClosureMessage("");
+        }
+      } catch {
+        setClosures([]);
+        setClosureMessage("");
+      }
+    };
+    fetchClosures();
+  }, []);
+
+
+
+  // Filter available time slots based on closure
+  // Instead of hiding unavailable slots, mark them as unclickable
+  const filteredTimeSlots = (() => {
+    if (!selectedDate) return availableTimes;
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    const closure = closures.find(c => c.date === dateStr);
+    if (!closure) return availableTimes;
+    if (closure.startTime && closure.endTime) {
+      // All slots, but mark those in closure period as unavailable
+      return availableTimes;
+    }
+    // Full day closure: all slots unavailable
+    return availableTimes;
+  })();
+
   // Calculate subtotal based on selected services
   const subtotal = selectedServices.reduce(
     (total, id) => total + (services.find((s) => s.id === id)?.price || 0),
@@ -178,9 +283,12 @@ const AppointmentPage = () => {
       setSelectedDate(new Date());
       setSelectedTime("");
       setNotes("");
-    } catch (error) {
-      console.error('Booking failed:', error);
-      alert("Booking failed: " + (error instanceof Error ? error.message : 'Unknown error'));
+    } catch (error: any) {
+      let msg = "Booking failed. Please try again.";
+      if (error?.message?.includes("Time slot is already booked")) {
+        msg = "Your chosen time slot is already taken. Please select another time.";
+      }
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -188,6 +296,15 @@ const AppointmentPage = () => {
 
   return (
     <div className="min-h-screen bg-[#212121] text-white">
+      {/* Closure Message Banner (always on top if closure) */}
+      {closureMessage && (
+        <div className="w-full flex justify-center items-center bg-yellow-900/90 border-b-2 border-yellow-600 text-yellow-100 py-4 px-2 font-bold text-lg shadow-lg z-50">
+          <span className="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" /></svg>
+            {closureMessage}
+          </span>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-[#181818] border-b border-gray-700 px-6 py-8">
         <div className="max-w-7xl mx-auto">
@@ -405,10 +522,17 @@ const AppointmentPage = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-300 mb-4">Choose Date</h3>
                   <div className="bg-[#232323] rounded-lg p-4 border border-gray-700">
+                    {/* Closure message */}
+                    {closureMessage && (
+                      <div className="mb-4 p-4 bg-red-900/80 border border-red-600 text-red-200 rounded-lg text-center font-semibold">
+                        {closureMessage}
+                      </div>
+                    )}
                     <DatePicker
                       selected={selectedDate}
                       onChange={(date: Date | null) => setSelectedDate(date)}
                       minDate={new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)}
+                      excludeDates={fullyClosedDates}
                       inline
                       className="w-full"
                     />
@@ -419,20 +543,41 @@ const AppointmentPage = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-300 mb-4">Available Times</h3>
                   <div className="grid grid-cols-3 gap-3">
-                    {availableTimes.map((time) => (
-                      <button
-                        key={time}
-                        onClick={() => setSelectedTime(time)}
-                        className={`py-3 px-4 rounded-lg border-2 text-center font-medium transition-all duration-200 ${
-                          selectedTime === time
-                            ? "bg-[#F7BF24] text-black border-[#F7BF24]"
-                            : "bg-[#232323] text-gray-300 border-gray-600 hover:border-[#F7BF24] hover:text-white"
-                        }`}
-                        type="button"
-                      >
-                        {time}
-                      </button>
-                    ))}
+                    {filteredTimeSlots.map((time) => {
+                      // If closure for the day, all slots are unavailable
+                      const dateStr = selectedDate ? selectedDate.toISOString().split('T')[0] : '';
+                      const closure = closures.find(c => c.date === dateStr);
+                      let isAvailable = availableTimeSlots.includes(time);
+                      if (closure) {
+                        if (closure.startTime && closure.endTime) {
+                          // Mark as unavailable if within closure period
+                          const slot24 = convertTo24Hour(time);
+                          if (slot24 >= closure.startTime && slot24 < closure.endTime) {
+                            isAvailable = false;
+                          }
+                        } else {
+                          // Full day closure
+                          isAvailable = false;
+                        }
+                      }
+                      return (
+                        <button
+                          key={time}
+                          onClick={() => isAvailable && setSelectedTime(time)}
+                          className={`py-3 px-4 rounded-lg border-2 text-center font-medium transition-all duration-200 ${
+                            selectedTime === time
+                              ? "bg-[#F7BF24] text-black border-[#F7BF24]"
+                              : isAvailable
+                              ? "bg-[#232323] text-gray-300 border-gray-600 hover:border-[#F7BF24] hover:text-white"
+                              : "bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed opacity-60"
+                          }`}
+                          type="button"
+                          disabled={!isAvailable}
+                        >
+                          {time}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

@@ -58,6 +58,15 @@ interface Service {
   isActive: boolean;
 }
 
+// SalonClosure interface
+interface SalonClosure {
+  id: number;
+  date: string; // ISO date
+  startTime?: string | null;
+  endTime?: string | null;
+  reason?: string;
+}
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -69,6 +78,12 @@ const AdminDashboard = () => {
   const [customersData, setCustomersData] = useState<Customer[]>([]);
   const [servicesData, setServicesData] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Closure management states
+  const [showClosureModal, setShowClosureModal] = useState(false);
+  const [closures, setClosures] = useState<SalonClosure[]>([]);
+  const [closureForm, setClosureForm] = useState<Partial<SalonClosure>>({ date: '', startTime: '', endTime: '', reason: '' });
+  const [closureLoading, setClosureLoading] = useState(false);
 
   // Load real data on component mount
   useEffect(() => {
@@ -238,8 +253,16 @@ const AdminDashboard = () => {
   };
 
   // Real notifications based on recent activity
-  const getRecentNotifications = () => {
-    const notifications = [];
+  type Notification = {
+    id: string;
+    type: 'customer' | 'service' | 'staff';
+    message: string;
+    time: string;
+    read: boolean;
+  };
+
+  const getRecentNotifications = (): Notification[] => {
+    const notifications: Notification[] = [];
     
     // Add notifications for recent customers
     if (customersData.length > 0) {
@@ -313,6 +336,52 @@ const AdminDashboard = () => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
+  // Fetch closures
+  const fetchClosures = async () => {
+    setClosureLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:8080/api/closures', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setClosures(await res.json());
+    } catch (e) {
+      setClosures([]);
+    }
+    setClosureLoading(false);
+  };
+
+  useEffect(() => { fetchClosures(); }, []);
+
+  // Add or update closure
+  const saveClosure = async () => {
+    setClosureLoading(true);
+    const method = closureForm.id ? 'PUT' : 'POST';
+    const url = closureForm.id ? `http://localhost:8080/api/closures/${closureForm.id}` : 'http://localhost:8080/api/closures';
+    const token = localStorage.getItem('token');
+    await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(closureForm),
+    });
+    setShowClosureModal(false);
+    setClosureForm({ date: '', startTime: '', endTime: '', reason: '' });
+    fetchClosures();
+    setClosureLoading(false);
+  };
+
+  // Delete closure
+  const deleteClosure = async (id: number) => {
+    setClosureLoading(true);
+    const token = localStorage.getItem('token');
+    await fetch(`http://localhost:8080/api/closures/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    fetchClosures();
+    setClosureLoading(false);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#212121] flex items-center justify-center">
@@ -374,6 +443,17 @@ const AdminDashboard = () => {
                 )}
               </button>
             ))}
+            {/* Manage Closures Button in Sidebar */}
+            <button
+              className={`w-full flex items-center justify-between px-3 py-3 text-left rounded-lg transition-all duration-200 group text-gray-300 hover:bg-[#232323] hover:text-[#F7BF24]`}
+              onClick={() => setShowClosureModal(true)}
+              title={sidebarCollapsed ? 'Manage Closures' : ''}
+            >
+              <div className="flex items-center">
+                <CalendarDaysIcon size={20} className="flex-shrink-0" />
+                {!sidebarCollapsed && <span className="ml-3 font-medium">Manage Closures</span>}
+              </div>
+            </button>
           </div>
         </nav>
 
@@ -667,6 +747,67 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
+
+
+          {/* Modal for managing closures */}
+          {showClosureModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+              <div className="bg-[#181818] rounded-xl p-8 w-full max-w-lg border border-yellow-600 shadow-2xl">
+                <h2 className="text-2xl font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                  <CalendarDaysIcon /> Manage Salon Closures
+                </h2>
+                <form
+                  onSubmit={e => { e.preventDefault(); saveClosure(); }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="block text-yellow-300 mb-1">Date</label>
+                    <input type="date" className="w-full rounded bg-[#232323] border border-yellow-700 px-3 py-2 text-yellow-100" value={closureForm.date} onChange={e => setClosureForm(f => ({ ...f, date: e.target.value }))} required />
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-yellow-300 mb-1">Start Time (optional)</label>
+                      <input type="time" className="w-full rounded bg-[#232323] border border-yellow-700 px-3 py-2 text-yellow-100" value={closureForm.startTime || ''} onChange={e => setClosureForm(f => ({ ...f, startTime: e.target.value }))} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-yellow-300 mb-1">End Time (optional)</label>
+                      <input type="time" className="w-full rounded bg-[#232323] border border-yellow-700 px-3 py-2 text-yellow-100" value={closureForm.endTime || ''} onChange={e => setClosureForm(f => ({ ...f, endTime: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-yellow-300 mb-1">Reason (optional)</label>
+                    <input type="text" className="w-full rounded bg-[#232323] border border-yellow-700 px-3 py-2 text-yellow-100" value={closureForm.reason || ''} onChange={e => setClosureForm(f => ({ ...f, reason: e.target.value }))} />
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <button type="submit" className="flex-1 py-2 rounded bg-yellow-500 text-black font-bold hover:bg-yellow-600 transition">{closureForm.id ? 'Update' : 'Add'} Closure</button>
+                    <button type="button" className="flex-1 py-2 rounded bg-gray-700 text-yellow-200 font-bold hover:bg-gray-800 transition" onClick={() => { setShowClosureModal(false); setClosureForm({ date: '', startTime: '', endTime: '', reason: '' }); }}>Cancel</button>
+                  </div>
+                </form>
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold text-yellow-300 mb-2">Existing Closures</h3>
+                  {closureLoading ? <div className="text-yellow-200">Loading...</div> : closures.length === 0 ? <div className="text-yellow-200">No closures set.</div> : (
+                    <ul className="space-y-2">
+                      {closures.map(c => (
+                        <li key={c.id} className="flex items-center justify-between bg-[#232323] rounded px-4 py-2 border border-yellow-800">
+                          <div>
+                            <span className="font-bold text-yellow-200">{c.date}</span>
+                            {c.startTime && c.endTime ? (
+                              <span className="ml-2 text-yellow-400">{c.startTime} - {c.endTime}</span>
+                            ) : <span className="ml-2 text-yellow-400">(Full day)</span>}
+                            {c.reason && <span className="ml-2 text-yellow-300 italic">{c.reason}</span>}
+                          </div>
+                          <div className="flex gap-2">
+                            <button className="text-yellow-400 hover:text-yellow-200" onClick={() => setClosureForm(c)}><EditIcon size={18} /></button>
+                            <button className="text-red-400 hover:text-red-600" onClick={() => deleteClosure(c.id)}><Trash2Icon size={18} /></button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
