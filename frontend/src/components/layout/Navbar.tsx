@@ -12,6 +12,7 @@ const navLinks = [
   { name: "Blog", path: "/blog" },
   { name: "About Us", path: "/aboutus" },
   { name: "Appointments", path: "/appointments" },
+  { name: "Virtual Try-On", path: "/virtual-try-on" },
 ];
 
 // Simulate getting user info from localStorage (replace with your auth logic)
