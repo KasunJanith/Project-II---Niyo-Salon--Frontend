@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAlert } from '../../../hooks/useAlert';
+import AlertBox from '../../../components/ui/AlertBox';
 
 interface ApiStaff {
   id: number;
@@ -46,6 +48,7 @@ interface Staff {
 
 const AdminStaff = () => {
   const navigate = useNavigate();
+  const { alert, showSuccess, showError, hideAlert } = useAlert();
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -194,17 +197,17 @@ const AdminStaff = () => {
         // Reload staff data from backend to ensure consistency
         await loadStaff();
         
-        alert('Staff member deleted successfully!');
+        showSuccess('Staff Deleted!', 'Staff member has been successfully deleted.');
         setShowDeleteModal(false);
         setSelectedStaffMember(null);
       } else {
         const error = await response.text();
         console.error('Error deleting staff:', error);
-        alert(`Error: ${error}`);
+        showError('Delete Failed', `Error: ${error}`);
       }
     } catch (error) {
       console.error('Network error:', error);
-      alert('Network error. Please check your connection and try again.');
+      showError('Network Error', 'Network error. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -243,15 +246,15 @@ const AdminStaff = () => {
         // Reload staff data to ensure UI is in sync
         await loadStaff();
         
-        alert(`Staff status updated to ${newStatus} successfully!`);
+        showSuccess('Status Updated!', `Staff status updated to ${newStatus} successfully!`);
       } else {
         const error = await response.text();
         console.error('Error updating status:', error);
-        alert(`Error: ${error}`);
+        showError('Update Failed', `Error: ${error}`);
       }
     } catch (error) {
       console.error('Network error:', error);
-      alert('Network error. Please check your connection and try again.');
+      showError('Network Error', 'Network error. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -303,17 +306,17 @@ const AdminStaff = () => {
         console.log('Reloading all staff data to ensure consistency...');
         await loadStaff();
         
-        alert('Staff member updated successfully!');
+        showSuccess('Staff Updated!', 'Staff member has been successfully updated.');
         setShowEditModal(false);
         setSelectedStaffMember(null);
       } else {
         const error = await response.text();
         console.error('Error updating staff:', error);
-        alert(`Error: ${error}`);
+        showError('Update Failed', `Error: ${error}`);
       }
     } catch (error) {
       console.error('Network error:', error);
-      alert('Network error. Please check your connection and try again.');
+      showError('Network Error', 'Network error. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -349,18 +352,18 @@ const AdminStaff = () => {
         // Reload staff data from backend to ensure consistency
         await loadStaff();
         
-        alert('Staff member added successfully!');
+        showSuccess('Staff Added!', 'Staff member has been successfully added.');
         setShowAddModal(false);
         // Reset form
         (e.target as HTMLFormElement).reset();
       } else {
         const error = await response.text();
         console.error('Error adding staff:', error);
-        alert(`Error: ${error}`);
+        showError('Add Failed', `Error: ${error}`);
       }
     } catch (error) {
       console.error('Network error:', error);
-      alert('Network error. Please check your connection and try again.');
+      showError('Network Error', 'Network error. Please check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -379,6 +382,15 @@ const AdminStaff = () => {
 
   return (
     <div className="min-h-screen bg-[#212121] text-white">
+      <AlertBox
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+        isOpen={alert.isOpen}
+        onClose={hideAlert}
+        autoClose={true}
+        autoCloseDelay={5000}
+      />
       {/* Header */}
       <div className="bg-[#181818] border-b border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between">

@@ -11,6 +11,7 @@ import CustomerDashboard from "./pages/dashboard/CustomerDashboard";
 import StaffDashboard from "./pages/dashboard/StaffDashboard";
 import AdminDashboard from "./pages/dashboard/AdminDashboard";
 import AppointmentPage from "./pages/AppointmentPage";
+import PaymentPage from "./pages/PaymentPage";
 import ProfilePage from "./pages/ProfilePage";
 import BlogPage from "./pages/BlogPage";
 import GalleryPage from "./pages/GalleryPage";
@@ -24,8 +25,8 @@ import AdminAppointments from "./pages/dashboard/Admin/AdminAppoinments";
 import { ReactNode, useEffect } from "react";
 import ServicesPage from "./pages/ServicesPage";
 import useUserData from "./hooks/useUserData";
-import 'aos/dist/aos.css';
-import AOS from "aos"; //  Import AOS
+import "aos/dist/aos.css";
+import AOS from "aos"; // <-- Import AOS
 import AboutUsPage from "./pages/AboutUsPage";
 import AdminUpload from './pages/dashboard/Admin/AdminUpload';
 import VirtualTryOnPage from './pages/VirtualTryOnPage';
@@ -47,7 +48,7 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
     return <div>Loading...</div>;
   }
 
-  if (user.id === -1 ) {
+  if (user.id === -1) {
     return <Navigate to="/login" replace />;
   }
 
@@ -67,36 +68,15 @@ export function App() {
   return (
     <Router>
       <Routes>
-        {/* Public/User routes with Layout (Navbar/Footer) */}
-        <Route path="/" element={<Layout />}>
-          <Route index element={<HomePage />} />
-          <Route path="login" element={<LoginPage />} />
-          <Route path="register" element={<RegisterPage />} />
-          <Route
-            path="appointments"
-            element={
-              <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
-                <AppointmentPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profile"
-            element={
-              <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
-                <ProfilePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="services" element={<ServicesPage />} />
-          <Route path="blog" element={<BlogPage />} />
-          <Route path="aboutus" element={<AboutUsPage />} />
-          <Route path="gallery" element={<GalleryPage />} />
-          <Route path="virtual-try-on" element={<VirtualTryOnPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
-
-        {/* Admin & Dashboard routes WITHOUT Layout (no Navbar/Footer) */}
+        {/* Dashboard routes without Layout (no navbar) */}
+        <Route
+          path="dashboard/staff"
+          element={
+            <ProtectedRoute allowedRoles={["staff", "admin"]}>
+              <StaffDashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="dashboard/customer"
           element={
@@ -169,15 +149,116 @@ export function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="payment"
+          element={
+            <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
+              <PaymentPage />
+            </ProtectedRoute>
+          }
+        />
 
-      <Route
-        path="/dashboard/admin/gallery-upload"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <AdminUpload />
-          </ProtectedRoute>
-        }
-      />
+        {/* All other routes with Layout (includes navbar) */}
+        <Route path="/" element={<Layout />}>
+          <Route index element={<HomePage />} />
+          <Route path="login" element={<LoginPage />} />
+          <Route path="register" element={<RegisterPage />} />
+          <Route
+            path="appointments"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
+                <AppointmentPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="payment"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
+                <PaymentPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="profile"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/customer"
+            element={
+              <ProtectedRoute allowedRoles={["customer"]}>
+                <CustomerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/admin"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="services" element={<ServicesPage />} />
+          <Route path="blog" element={<BlogPage />} />
+          <Route path="aboutus" element={<AboutUsPage />} />
+          <Route path="gallery" element={<GalleryPage />} />
+
+          <Route path="*" element={<NotFoundPage />} />
+
+          <Route
+            path="dashboard/add-staff"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AddStaffPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/users"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminUsers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/adminstaff"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminStaff />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/appointments"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminAppointments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/services"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminServices />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="dashboard/appointments/new"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminAppointments />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
       </Routes>
     </Router>
   );

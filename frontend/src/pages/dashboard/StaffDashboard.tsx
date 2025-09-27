@@ -1,86 +1,95 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  UserIcon, 
-  CalendarIcon, 
-  ClockIcon, 
-  CheckCircleIcon,
-  XCircleIcon,
-  BellIcon,
   MenuIcon,
   XIcon,
   LogOutIcon,
-  Users2Icon,
-  ScissorsIcon,
-  ToggleLeftIcon,
-  ToggleRightIcon,
-  SettingsIcon
+  HomeIcon,
+  CalendarIcon,
+  PackageIcon,
+  BellIcon
 } from 'lucide-react';
 import logo from '../../assets/Niyo Logo.jpg';
 import useUserData from '../../hooks/useUserData';
+import { staffMembers } from '../../services/appointmentService';
+import StaffOverview from './Staff/StaffOverview';
+import StaffAppointments from './Staff/StaffAppointments';
+import StaffServices from './Staff/StaffServices';
+import StaffNotifications from './Staff/StaffNotifications';
 
 const StaffDashboard = () => {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAvailable, setIsAvailable] = useState(true);
-  const [showAvailabilitySettings, setShowAvailabilitySettings] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+  
   const user = useUserData();
 
-  // Simple appointments data
-  const todaysAppointments = [
-    {
-      id: 1,
-      clientName: 'Sarah Johnson',
-      service: 'Haircut',
-      time: '10:00 AM',
-      status: 'upcoming'
-    },
-    {
-      id: 2,
-      clientName: 'Michael Chen',
-      service: 'Beard Trim',
-      time: '11:00 AM',
-      status: 'in-progress'
-    }
-  ];
+  // Get current staff member data
+  const currentStaff = staffMembers.find(staff => 
+    staff.name.toLowerCase().includes(user.username?.toLowerCase() || '') ||
+    staff.id === `staff-${user.id}`
+  ) || staffMembers[0]; // Fallback to first staff member
 
-  // Simple metrics
-  const keyMetrics = [
-    { title: 'Today\'s Appointments', value: 3, icon: CalendarIcon, color: 'text-blue-400' },
-    { title: 'Active Clients', value: 12, icon: Users2Icon, color: 'text-green-400' },
-    { title: 'Services Today', value: 8, icon: ScissorsIcon, color: 'text-purple-400' },
-    { title: 'Working Hours', value: '8h', icon: ClockIcon, color: 'text-[#F7BF24]' }
-  ];
+  // Load staff status from backend
+  useEffect(() => {
+    const loadStaffStatus = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`http://localhost:8080/api/admin/staff`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const staffList = await response.json();
+          // Find current staff member in the list
+          const currentStaffData = staffList.find((staff: { id: number; name: string; isActive: boolean }) => 
+            staff.id === user.id || 
+            staff.name.toLowerCase().includes(user.username?.toLowerCase() || '')
+          );
+          
+          if (currentStaffData) {
+            setIsAvailable(currentStaffData.isActive);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading staff status:', error);
+      }
+    };
+
+    if (user.id) {
+      loadStaffStatus();
+    }
+  }, [user.id, user.username]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     navigate('/login');
   };
 
-  const toggleAvailability = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8080/api/staff/availability', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          available: !isAvailable,
-          staffId: user.id 
-        })
-      });
+  const menuItems = [
+    { id: 'overview', label: 'Overview', icon: HomeIcon },
+    { id: 'appointments', label: 'Appointments', icon: CalendarIcon },
+    { id: 'services', label: 'Services', icon: PackageIcon },
+    { id: 'notifications', label: 'Notifications', icon: BellIcon }
+  ];
 
-      if (response.ok) {
-        setIsAvailable(!isAvailable);
-        alert(`You are now ${!isAvailable ? 'Available' : 'Unavailable'} for appointments`);
-      } else {
-        alert('Failed to update availability');
-      }
-    } catch (error) {
-      console.error('Error updating availability:', error);
-      alert('Error updating availability');
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'overview':
+        return <StaffOverview />;
+      case 'appointments':
+        return <StaffAppointments />;
+      case 'services':
+        return <StaffServices />;
+      case 'notifications':
+        return <StaffNotifications />;
+      default:
+        return <StaffOverview />;
     }
   };
 
@@ -107,21 +116,38 @@ const StaffDashboard = () => {
           </button>
         </div>
 
-        {/* Availability Toggle */}
+        {/* Navigation Menu */}
+        <nav className="mt-6">
+          {menuItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center space-x-3 px-4 py-3 text-left hover:bg-[#232323] transition-colors ${
+                activeTab === item.id ? 'bg-[#232323] border-r-2 border-[#F7BF24]' : ''
+              }`}
+            >
+              <item.icon size={20} className={activeTab === item.id ? 'text-[#F7BF24]' : 'text-gray-400'} />
+              {!sidebarCollapsed && (
+                <span className={`font-medium ${activeTab === item.id ? 'text-[#F7BF24]' : 'text-gray-300'}`}>
+                  {item.label}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        {/* Availability Status (Read-only) */}
         {!sidebarCollapsed && (
-          <div className="px-4 py-3 border-b border-gray-700">
+          <div className="px-4 py-3 border-t border-gray-700 mt-6">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-300">Availability</span>
-              <button
-                onClick={toggleAvailability}
-                className="flex items-center space-x-2"
-              >
+              <span className="text-sm font-medium text-gray-300">Availability Status</span>
+              <div className="flex items-center space-x-2">
                 {isAvailable ? (
-                  <ToggleRightIcon size={20} className="text-green-400" />
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
                 ) : (
-                  <ToggleLeftIcon size={20} className="text-red-400" />
+                  <div className="w-2 h-2 bg-red-400 rounded-full"></div>
                 )}
-              </button>
+              </div>
             </div>
             <div className="mt-1">
               <span className={`text-xs px-2 py-1 rounded-full ${
@@ -132,6 +158,14 @@ const StaffDashboard = () => {
                 {isAvailable ? 'Available' : 'Unavailable'}
               </span>
             </div>
+            <div className="mt-2 text-xs text-gray-500">
+              <p>Contact admin to change availability status</p>
+            </div>
+            {currentStaff && (
+              <div className="mt-2 text-xs text-gray-400">
+                <p>{user.username || 'Staff Member'}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -151,137 +185,8 @@ const StaffDashboard = () => {
 
       {/* Main Content */}
       <div className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-64'} flex-1`}>
-        {/* Header */}
-        <header className="bg-[#181818] border-b border-gray-700 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white">Staff Dashboard</h1>
-              <p className="text-gray-400 mt-1">Welcome back, {user.username || 'Staff Member'}!</p>
-            </div>
-            <div className="flex items-center space-x-3">
-              {/* Availability Status */}
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${
-                  isAvailable ? 'bg-green-400' : 'bg-red-400'
-                }`}></div>
-                <span className="text-sm text-gray-400">
-                  {isAvailable ? 'Available' : 'Unavailable'}
-                </span>
-              </div>
-              
-              <div className="text-right">
-                <p className="text-white text-sm font-medium">
-                  {user.username ? user.username.charAt(0).toUpperCase() + user.username.slice(1) : 'Staff'}
-                </p>
-                <p className="text-gray-400 text-xs">Staff Member</p>
-              </div>
-              <div className="w-10 h-10 bg-[#F7BF24] rounded-full flex items-center justify-center">
-                <UserIcon size={20} className="text-black" />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Dashboard Content */}
         <main className="p-6">
-          {/* Availability Card */}
-          <div className="bg-[#181818] rounded-xl border border-gray-700 mb-6">
-            <div className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className={`p-3 rounded-lg ${
-                    isAvailable ? 'bg-green-500/10' : 'bg-red-500/10'
-                  }`}>
-                    <SettingsIcon size={24} className={isAvailable ? 'text-green-400' : 'text-red-400'} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">
-                      Status: {isAvailable ? 'Available' : 'Unavailable'}
-                    </h3>
-                    <p className="text-sm text-gray-400">
-                      {isAvailable 
-                        ? 'You can receive new appointment requests' 
-                        : 'New appointments are paused'
-                      }
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={toggleAvailability}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    isAvailable 
-                      ? 'bg-red-700 hover:bg-red-600 text-white' 
-                      : 'bg-green-700 hover:bg-green-600 text-white'
-                  }`}
-                >
-                  {isAvailable ? 'Go Unavailable' : 'Go Available'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {keyMetrics.map((metric, index) => (
-              <div key={index} className="bg-[#181818] p-6 rounded-xl border border-gray-700">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 rounded-lg bg-gray-500/10">
-                    <metric.icon size={24} className={metric.color} />
-                  </div>
-                </div>
-                <h3 className="text-3xl font-bold text-white mb-1">{metric.value}</h3>
-                <p className="text-gray-400 font-medium">{metric.title}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Today's Appointments */}
-          <div className="bg-[#181818] rounded-xl border border-gray-700">
-            <div className="p-6 border-b border-gray-700">
-              <h2 className="text-xl font-bold text-white">Today's Appointments</h2>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                {todaysAppointments.map((appointment) => (
-                  <div key={appointment.id} className="bg-[#232323] rounded-lg p-4 border border-gray-700">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-[#F7BF24] rounded-full flex items-center justify-center text-black font-bold">
-                          {appointment.clientName.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-white">{appointment.clientName}</h4>
-                          <p className="text-sm text-gray-400">{appointment.service}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-white">{appointment.time}</p>
-                        </div>
-                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          appointment.status === 'upcoming' ? 'bg-blue-500/20 text-blue-400' :
-                          appointment.status === 'in-progress' ? 'bg-green-500/20 text-green-400' :
-                          'bg-gray-500/20 text-gray-400'
-                        }`}>
-                          {appointment.status}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex space-x-2">
-                      <button className="bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded-md text-sm transition-colors">
-                        <CheckCircleIcon size={14} className="inline mr-1" />
-                        Start
-                      </button>
-                      <button className="bg-red-700 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm transition-colors">
-                        <XCircleIcon size={14} className="inline mr-1" />
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          {renderContent()}
         </main>
       </div>
     </div>
