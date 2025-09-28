@@ -57,7 +57,7 @@ interface Service {
   available: boolean;
 }
 
-// Add SalonClosure type (NEW FEATURE from friend)
+// Add SalonClosure type
 interface SalonClosure {
   id: number;
   date: string; // ISO date
@@ -111,7 +111,7 @@ const AppointmentPage = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [availableTimes, setAvailableTimes] = useState<TimeSlot[]>([]);
   
-  // NEW FEATURES from friend - Salon Closure Management
+  // Salon Closure Management
   const [closures, setClosures] = useState<SalonClosure[]>([]);
   const [closureMessage, setClosureMessage] = useState<string>("");
   
@@ -543,15 +543,51 @@ const AppointmentPage = () => {
 
   return (
     <div className="min-h-screen bg-[#212121] text-white">
-      {/* NEW FEATURE - Closure Message Banner (always on top if closure) */}
+      {/* Compact Premium Salon Closure Banner */}
       {closureMessage && (
-        <div className="w-full flex justify-center items-center bg-yellow-900/90 border-b-2 border-yellow-600 text-yellow-100 py-4 px-2 font-bold text-lg shadow-lg z-50">
-          <span className="flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
-            </svg>
-            {closureMessage}
-          </span>
+        <div className="relative w-full bg-gradient-to-r from-amber-900/90 via-yellow-800/90 to-amber-900/90 border-b border-[#F7BF24]/30 shadow-lg overflow-hidden">
+          {/* Subtle background pattern */}
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-[#F7BF24]/10 to-transparent transform skew-x-12"></div>
+          </div>
+          
+          {/* Close button - properly centered */}
+          <button
+            onClick={() => setClosureMessage("")}
+            className="absolute top-1/2 right-4 transform -translate-y-1/2 z-20 p-1.5 rounded-full bg-black/30 hover:bg-black/50 text-yellow-100/80 hover:text-white transition-all duration-200 hover:scale-110 flex items-center justify-center"
+            title="Dismiss notice"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
+          
+          {/* Main content - compact layout with proper spacing */}
+          <div className="relative z-10 flex justify-center items-center py-3 px-6 pr-14">
+            <div className="flex items-center gap-3 max-w-4xl w-full">
+              {/* Compact warning icon */}
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-gradient-to-br from-[#F7BF24] to-yellow-500 rounded-full flex items-center justify-center shadow-md">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                  </svg>
+                </div>
+              </div>
+              
+              {/* Compact message content */}
+              <div className="flex-1 text-center">
+                <p className="text-yellow-50 font-medium text-sm leading-tight">
+                  <span className="text-[#F7BF24] font-semibold">Notice:</span> {closureMessage}
+                </p>
+              </div>
+              
+              {/* Compact decorative element */}
+              <div className="flex-shrink-0 hidden sm:block">
+                <div className="flex items-center gap-1 text-[#F7BF24]/80">
+                  <ScissorsIcon className="h-4 w-4" />
+                  <SparklesIcon className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
