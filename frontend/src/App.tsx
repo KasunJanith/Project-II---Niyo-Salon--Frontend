@@ -164,6 +164,15 @@ export function App() {
           <Route path="login" element={<LoginPage />} />
           <Route path="register" element={<RegisterPage />} />
           <Route path="virtual-try-on" element={<VirtualTryOnPage />} />
+          {/* <Route
+            path="virtual-try-on"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
+                <AppointmentPage />
+              </ProtectedRoute>
+            }
+          /> */}
+
           <Route
             path="appointments"
             element={
@@ -260,13 +269,13 @@ export function App() {
             }
           />
           <Route
-        path="/dashboard/admin/gallery-upload"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <AdminUpload />
-          </ProtectedRoute>
-        }
-      />
+            path="/dashboard/admin/gallery-upload"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminUpload />
+              </ProtectedRoute>
+            }
+          />
         </Route>
       </Routes>
     </Router>
