@@ -131,6 +131,10 @@ const VirtualTryOnPage = () => {
     if (!previewCanvasRef.current || !videoRef.current || !selectedStyle || !videoPlaying) return;
 
     const ctx = previewCanvasRef.current.getContext('2d');
+    if (!ctx) {
+      console.error('Canvas context not available');
+      return;
+    }
     ctx.clearRect(0, 0, 640, 480);
 
     // Draw the camera feed as background
@@ -150,15 +154,23 @@ const VirtualTryOnPage = () => {
       const leftEye = landmarks.getLeftEye();
       const rightEye = landmarks.getRightEye();
 
-      // Calculate head width and height based on eye positions
+      console.log('Landmarks detected:', { nose, leftEye, rightEye }); // Debug landmark detection
+      if (!nose || !leftEye || !rightEye) {
+        console.warn('Incomplete facial landmarks');
+        return;
+      }
+
       const headWidth = Math.abs(rightEye.x - leftEye.x) * 640;
       const headHeight = headWidth * 1.2;
       const x = (nose.x * 640) - (headWidth / 2);
       const y = (nose.y * 480) - (headHeight / 2);
 
       ctx.drawImage(overlayImageRef.current, x, y, headWidth, headHeight);
-    } else if (!overlayImageRef.current?.complete) {
-      console.warn('Overlay image not loaded yet');
+    } else {
+      console.warn('Overlay image or landmarks not ready:', {
+        overlayLoaded: overlayImageRef.current?.complete,
+        landmarksAvailable: !!faceLandmarksRef.current,
+      });
     }
   };
 
@@ -266,6 +278,7 @@ const VirtualTryOnPage = () => {
         selfieSegmentation.current.onResults(onSegmentationResults);
       } catch (err) {
         console.error('Failed to initialize selfie segmentation:', err);
+        setError('Segmentation initialization failed. Please check your browser settings.');
       }
     };
 
@@ -281,9 +294,13 @@ const VirtualTryOnPage = () => {
             const detections = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
             if (detections) {
               faceLandmarksRef.current = detections.landmarks;
+              console.log('Face landmarks updated:', detections.landmarks); // Debug
+            } else {
+              console.warn('No face detected in current frame');
             }
           } catch (err) {
             console.error('Segmentation or landmark detection error:', err);
+            setError('Error processing video feed. Check console for details.');
           }
         }
       }, 100);
@@ -295,10 +312,11 @@ const VirtualTryOnPage = () => {
   useEffect(() => {
     if (selectedStyle) {
       const img = new Image();
-      img.crossOrigin = 'anonymous'; // Handle CORS if images are from a different domain
+      img.crossOrigin = 'anonymous';
       img.src = selectedStyle.overlay || selectedStyle.image;
       img.onload = () => {
         overlayImageRef.current = img;
+        console.log('Overlay image loaded:', selectedStyle.overlay); // Debug
       };
       img.onerror = () => {
         console.error('Failed to load overlay image:', selectedStyle.overlay);
@@ -307,6 +325,7 @@ const VirtualTryOnPage = () => {
         fallbackImg.src = selectedStyle.image;
         fallbackImg.onload = () => {
           overlayImageRef.current = fallbackImg;
+          console.log('Fallback image loaded:', selectedStyle.image); // Debug
         };
         fallbackImg.onerror = () => {
           console.error('Failed to load fallback image:', selectedStyle.image);

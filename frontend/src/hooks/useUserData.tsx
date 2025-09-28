@@ -19,21 +19,25 @@ export default function useUserData() {
   useEffect(() => {
     const handleAuth = async () => {
       const token = localStorage.getItem("token");
-      if (!token) return;
+      if (!token) {
+        console.warn("No token found in localStorage. User not authenticated.");
+        setUser({ id: -1, password: "", phoneNumber: "", role: "", username: "" });
+        return;
+      }
 
       try {
         const response = await axios.get("http://localhost:8080/api/auth/me", {
           headers: {
             "Content-Type": "application/json",
-            Authorization: "Bearer " + token,
+            Authorization: `Bearer ${token}`,
           },
           withCredentials: true,
         });
 
         setUser(response.data);
-        console.log(response);
+        console.log("User data fetched successfully:", response.data);
       } catch (err) {
-        console.log(err);
+        console.error("Authentication error:", err);
         setUser({
           id: -1,
           password: "",
