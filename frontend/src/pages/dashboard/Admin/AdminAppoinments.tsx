@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   CalendarIcon,
   PlusIcon,
@@ -19,12 +19,17 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MoreVerticalIcon,
+  ScissorsIcon,
+  PencilIcon,
+  GemIcon,
+  SparklesIcon,
+  UserIcon,
+  StickyNoteIcon,
+  InfoIcon,
+  AlertTriangleIcon
 } from "lucide-react";
 import {
   services,
-  customers,
-  availableTimeSlots,
-  formatTimeForDisplay,
   calculateEndTime,
   type AppointmentBooking,
 } from "../../../services/appointmentService";
@@ -32,6 +37,7 @@ import {
   adminService,
   type ServiceResponse,
 } from "../../../services/adminService";
+import { bookingService } from "../../../services/bookingService";
 import { useAlert } from '../../../hooks/useAlert';
 import AlertBox from '../../../components/ui/AlertBox';
 
@@ -81,6 +87,817 @@ const API_ENDPOINTS = {
   SERVICES: "/api/admin/services"
 } as const;
 
+// Interface for Service similar to AppointmentPage
+interface AdminServiceType {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  duration: number;
+  category: string;
+  isActive?: boolean;
+  icon: React.ComponentType<{className?: string; size?: number | string}>; // LucideIcon type
+  available: boolean;
+}
+
+// Customer search interface
+interface CustomerSearchResult {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  isRegistered: boolean;
+}
+
+// API User interface (from backend)
+interface ApiUser {
+  id: number;
+  username: string;
+  phoneNumber: string;
+  role: string;
+  email?: string;
+  createdAt?: string;
+}
+
+// Time slot interface
+interface TimeSlot {
+  time: string;
+  available: boolean;
+  currentBookings: number;
+  maxCapacity: number;
+}
+
+// Alert modal interface
+interface AlertModal {
+  isOpen: boolean;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+}
+
+// Map category to icon
+const getCategoryIcon = (category: string) => {
+  switch (category.toLowerCase()) {
+    case 'hair services':
+      return ScissorsIcon;
+    case 'barber services':
+      return GemIcon;
+    case 'tattoo services':
+      return PencilIcon;
+    default:
+      return SparklesIcon;
+  }
+};
+
+// AdminBookingForm Component
+interface AdminBookingFormProps {
+  onClose: () => void;
+  onAppointmentCreated: () => void;
+  activeStaffList: StaffMember[];
+  servicesList: ServiceResponse[];
+}
+
+const AdminBookingForm: React.FC<AdminBookingFormProps> = ({
+  onClose,
+  onAppointmentCreated,
+  activeStaffList,
+  servicesList
+}) => {
+  // State for customer search and selection
+  const [customerSearchType, setCustomerSearchType] = useState<'search' | 'manual'>('search');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState<CustomerSearchResult[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchResult | null>(null);
+  
+  // Manual customer entry
+  const [manualCustomer, setManualCustomer] = useState({
+    name: '',
+    phone: ''
+  });
+
+  // Service selection
+  const [adminServices, setAdminServices] = useState<AdminServiceType[]>([]);
+  const [selectedServices, setSelectedServices] = useState<number[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+
+  // Date and time selection
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedTime, setSelectedTime] = useState('');
+  const [availableTimeSlotsData, setAvailableTimeSlotsData] = useState<TimeSlot[]>([]);
+  const [timeLoading, setTimeLoading] = useState(false);
+
+  // Additional fields
+  const [notes, setNotes] = useState('');
+  const [assignedStaffId, setAssignedStaffId] = useState('');
+
+  // UI states
+  const [loading, setLoading] = useState(false);
+  const [alertModal, setAlertModal] = useState<AlertModal>({
+    isOpen: false,
+    type: 'info',
+    title: '',
+    message: ''
+  });
+
+  // Load services on component mount
+  const loadServicesForAdmin = useCallback(async () => {
+    try {
+      setServicesLoading(true);
+      let servicesToUse: ServiceResponse[] = [];
+
+      if (servicesList && servicesList.length > 0) {
+        servicesToUse = servicesList;
+      } else {
+        try {
+          servicesToUse = await adminService.getAllServices();
+        } catch (error) {
+          // Fallback to static services
+          servicesToUse = services.map(s => ({
+            id: parseInt(s.id),
+            name: s.name,
+            description: s.description || 'Professional service',
+            price: s.price,
+            duration: s.duration,
+            category: s.category,
+            isActive: s.isActive !== false
+          }));
+        }
+      }
+
+      const adminServicesData: AdminServiceType[] = servicesToUse
+        .filter(service => service.isActive !== false)
+        .map(service => ({
+          id: service.id,
+          name: service.name,
+          description: service.description || 'Professional service',
+          price: service.price,
+          duration: service.duration,
+          category: service.category,
+          isActive: service.isActive !== false,
+          icon: getCategoryIcon(service.category),
+          available: true
+        }));
+
+      setAdminServices(adminServicesData);
+    } catch (error) {
+      console.error('Error loading services:', error);
+    } finally {
+      setServicesLoading(false);
+    }
+  }, [servicesList]);
+
+  // Helper function to convert 12-hour time to 24-hour format
+  function convertTo24Hour(time12h: string) {
+    const [time, modifier] = time12h.split(" ");
+    let [hours] = time.split(":").map(Number);
+    const minutes = parseInt(time.split(":")[1]);
+
+    if (modifier === "PM" && hours !== 12) {
+      hours += 12;
+    }
+    if (modifier === "AM" && hours === 12) {
+      hours = 0;
+    }
+    return `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}`;
+  }
+
+  const loadAvailableTimeSlots = useCallback(async () => {
+    if (!selectedDate) return;
+    try {
+      setTimeLoading(true);
+      const dateStr = selectedDate.toISOString().split("T")[0];
+      
+      // Generate standard time slots (9 AM to 7 PM)
+      const standardTimeSlots = [
+        "09:00 AM",
+        "10:00 AM", 
+        "11:00 AM",
+        "12:00 PM",
+        "01:00 PM",
+        "02:00 PM",
+        "03:00 PM",
+        "04:00 PM",
+        "05:00 PM",
+        "06:00 PM",
+        "07:00 PM"
+      ];
+      
+      // Fetch existing appointments for this date to check capacity
+      const appointments = await bookingService.getAppointmentsByDate(dateStr);
+      
+      // Calculate capacity for each time slot based on actual staff availability
+      const timeSlots: TimeSlot[] = await Promise.all(
+        standardTimeSlots.map(async (time) => {
+          const appointmentsAtTime = appointments.filter(apt => {
+            const aptTime24h = apt.time; // Backend stores in 24h format
+            const timeSlot24h = convertTo24Hour(time);
+            return aptTime24h === timeSlot24h;
+          });
+          
+          const currentBookings = appointmentsAtTime.length;
+          
+          // Try to get actual staff capacity from backend
+          // We'll use the checkTimeSlotAvailability method to determine if this slot is available
+          let available = true;
+          try {
+            const timeSlot24h = convertTo24Hour(time);
+            available = await bookingService.checkTimeSlotAvailability({
+              date: dateStr,
+              time: timeSlot24h
+            });
+          } catch (error) {
+            // If we can't check availability, assume it's available for fallback
+            console.warn(`Could not check availability for ${time}:`, error);
+            available = true;
+          }
+          
+          // Estimate capacity based on current bookings and availability
+          // If backend says it's not available, then we've reached capacity
+          const estimatedMaxCapacity = available ? Math.max(currentBookings + 1, 5) : currentBookings;
+          
+          return {
+            time,
+            available,
+            currentBookings,
+            maxCapacity: estimatedMaxCapacity
+          };
+        })
+      );
+      
+      setAvailableTimeSlotsData(timeSlots);
+    } catch (error) {
+      console.error('Error loading available times:', error);
+      // Fallback: show all time slots as available if we can't fetch appointment data
+      const fallbackTimeSlots: TimeSlot[] = [
+        "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM",
+        "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM"
+      ].map(time => ({
+        time,
+        available: true,
+        currentBookings: 0,
+        maxCapacity: 5
+      }));
+      setAvailableTimeSlotsData(fallbackTimeSlots);
+    } finally {
+      setTimeLoading(false);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    loadServicesForAdmin();
+  }, [loadServicesForAdmin]);
+
+  // Load available time slots when date changes
+  useEffect(() => {
+    if (selectedDate) {
+      loadAvailableTimeSlots();
+    }
+  }, [selectedDate, loadAvailableTimeSlots]);
+
+  const searchCustomers = async (query: string) => {
+    if (!query.trim()) {
+      setCustomerSearchResults([]);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/admin/users', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const usersFromApi: ApiUser[] = await response.json();
+        // Filter only customer users
+        const customerUsers = usersFromApi.filter((user: ApiUser) => user.role === 'customer');
+        
+        // Search through customers by name or phone
+        const results = customerUsers
+          .filter((user: ApiUser) => 
+            user.username.toLowerCase().includes(query.toLowerCase()) ||
+            user.phoneNumber.includes(query)
+          )
+          .slice(0, 5)
+          .map((user: ApiUser) => ({
+            id: user.id.toString(),
+            name: user.username,
+            email: user.email || `${user.username.toLowerCase().replace(' ', '.')}@email.com`,
+            phone: user.phoneNumber,
+            isRegistered: true
+          }));
+
+        setCustomerSearchResults(results);
+      } else {
+        console.error('Failed to search customers:', response.status);
+        setCustomerSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Error searching customers:', error);
+      setCustomerSearchResults([]);
+    }
+  };
+
+  const showAlert = (type: AlertModal['type'], title: string, message: string) => {
+    setAlertModal({
+      isOpen: true,
+      type,
+      title,
+      message
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const toggleServiceSelection = (serviceId: number) => {
+    setSelectedServices(prev => {
+      if (prev.includes(serviceId)) {
+        return prev.filter(id => id !== serviceId);
+      } else {
+        return [...prev, serviceId];
+      }
+    });
+  };
+
+  const calculateTotals = () => {
+    const selectedServiceData = adminServices.filter(s => selectedServices.includes(s.id));
+    const subtotal = selectedServiceData.reduce((total, service) => total + service.price, 0);
+    const totalDuration = selectedServiceData.reduce((total, service) => total + service.duration, 0);
+    
+    return { subtotal, totalDuration, selectedServiceData };
+  };
+
+  const handleBookingSubmit = async () => {
+    // Validation
+    if (customerSearchType === 'search' && !selectedCustomer) {
+      showAlert('warning', 'Customer Required', 'Please select a customer or switch to manual entry.');
+      return;
+    }
+
+    if (customerSearchType === 'manual' && (!manualCustomer.name.trim() || !manualCustomer.phone.trim())) {
+      showAlert('warning', 'Customer Information Required', 'Please enter customer name and phone number.');
+      return;
+    }
+
+    if (selectedServices.length === 0) {
+      showAlert('warning', 'Service Required', 'Please select at least one service.');
+      return;
+    }
+
+    if (!selectedTime) {
+      showAlert('warning', 'Time Required', 'Please select an appointment time.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const customerData = customerSearchType === 'search' && selectedCustomer 
+        ? selectedCustomer 
+        : {
+            id: '',
+            name: manualCustomer.name,
+            email: '',
+            phone: manualCustomer.phone,
+            isRegistered: false
+          };
+
+      const { selectedServiceData } = calculateTotals();
+
+      // Prepare appointment data
+      const appointmentData = {
+        customerName: customerData.name,
+        customerPhone: customerData.phone,
+        services: selectedServiceData.map(s => s.name).join(', '),
+        date: selectedDate.toISOString().split('T')[0],
+        time: convertTo24Hour(selectedTime) + ':00',
+        notes: notes.trim() || undefined,
+        userId: customerData.isRegistered ? parseInt(customerData.id) : undefined,
+        staffId: assignedStaffId ? parseInt(assignedStaffId) : undefined
+      };
+
+      // Book the appointment
+      const bookedAppointment = await bookingService.bookAppointment(appointmentData);
+
+      // Automatically confirm admin-booked appointments
+      await bookingService.updateAppointmentStatus(bookedAppointment.id, 'CONFIRMED');
+
+      const staffAssignmentMsg = assignedStaffId ? 
+        ` Staff member has been assigned to this appointment.` : 
+        ` Staff can be assigned later from the appointments list.`;
+
+      showAlert('success', 'Appointment Created', `The appointment has been successfully created and confirmed.${staffAssignmentMsg}`);
+      
+      // Reset form and close after delay
+      setTimeout(() => {
+        onAppointmentCreated();
+        onClose();
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+      showAlert('error', 'Booking Failed', `Could not create appointment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const { subtotal, totalDuration } = calculateTotals();
+
+  return (
+    <div className="space-y-6">
+      {/* Alert Modal */}
+      {alertModal.isOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#181818] rounded-xl p-6 w-full max-w-md border border-gray-700 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              {alertModal.type === 'success' && (
+                <CheckIcon className="h-6 w-6 text-green-400" />
+              )}
+              {alertModal.type === 'error' && (
+                <XCircleIcon className="h-6 w-6 text-red-400" />
+              )}
+              {alertModal.type === 'warning' && (
+                <AlertTriangleIcon className="h-6 w-6 text-yellow-400" />
+              )}
+              {alertModal.type === 'info' && (
+                <InfoIcon className="h-6 w-6 text-blue-400" />
+              )}
+              <h3 className="text-lg font-semibold text-white">{alertModal.title}</h3>
+            </div>
+            <p className="text-gray-300 mb-6">{alertModal.message}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={closeAlert}
+                className="bg-[#F7BF24] hover:bg-[#E5AB20] text-black px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 1: Customer Selection */}
+      <div className="bg-[#232323] rounded-lg p-6 border border-gray-700">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <UserIcon className="h-5 w-5 text-[#F7BF24]" />
+          Step 1: Customer Information
+        </h3>
+
+        {/* Customer Type Selection */}
+        <div className="flex gap-4 mb-4">
+          <button
+            onClick={() => setCustomerSearchType('search')}
+            className={`px-4 py-2 rounded-lg transition-colors ${
+              customerSearchType === 'search'
+                ? 'bg-[#F7BF24] text-black font-medium'
+                : 'bg-[#181818] text-gray-300 hover:text-white'
+            }`}
+          >
+            Search Registered Customer
+          </button>
+          <button
+            onClick={() => setCustomerSearchType('manual')}
+            className={`px-4 py-2 rounded-lg transition-colors ${
+              customerSearchType === 'manual'
+                ? 'bg-[#F7BF24] text-black font-medium'
+                : 'bg-[#181818] text-gray-300 hover:text-white'
+            }`}
+          >
+            Add New Customer
+          </button>
+        </div>
+
+        {/* Customer Search */}
+        {customerSearchType === 'search' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Search by name or phone number
+              </label>
+              <input
+                type="text"
+                value={customerSearchQuery}
+                onChange={(e) => {
+                  setCustomerSearchQuery(e.target.value);
+                  searchCustomers(e.target.value);
+                }}
+                placeholder="Enter customer name or phone..."
+                className="w-full px-3 py-2 bg-[#181818] border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#F7BF24]"
+              />
+            </div>
+
+            {/* Search Results */}
+            {customerSearchResults.length > 0 && (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {customerSearchResults.map((customer) => (
+                  <div
+                    key={customer.id}
+                    onClick={() => {
+                      setSelectedCustomer(customer);
+                      setCustomerSearchQuery(customer.name);
+                      setCustomerSearchResults([]);
+                    }}
+                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedCustomer?.id === customer.id
+                        ? 'bg-[#F7BF24]/10 border-[#F7BF24] text-white'
+                        : 'bg-[#181818] border-gray-600 text-gray-300 hover:border-[#F7BF24] hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{customer.name}</p>
+                        <p className="text-sm text-gray-400">{customer.phone}</p>
+                      </div>
+                      {customer.isRegistered && (
+                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">
+                          Registered
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Selected Customer Display */}
+            {selectedCustomer && (
+              <div className="bg-[#181818] p-4 rounded-lg border border-[#F7BF24]">
+                <h4 className="font-medium text-white mb-2">Selected Customer</h4>
+                <p className="text-gray-300">{selectedCustomer.name}</p>
+                <p className="text-gray-400 text-sm">{selectedCustomer.phone}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Manual Customer Entry */}
+        {customerSearchType === 'manual' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Customer Name *
+              </label>
+              <input
+                type="text"
+                value={manualCustomer.name}
+                onChange={(e) => setManualCustomer(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Enter full name..."
+                className="w-full px-3 py-2 bg-[#181818] border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#F7BF24]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Phone Number *
+              </label>
+              <input
+                type="tel"
+                value={manualCustomer.phone}
+                onChange={(e) => setManualCustomer(prev => ({ ...prev, phone: e.target.value }))}
+                placeholder="Enter phone number..."
+                className="w-full px-3 py-2 bg-[#181818] border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#F7BF24]"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Step 2: Service Selection */}
+      <div className="bg-[#232323] rounded-lg p-6 border border-gray-700">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <ScissorsIcon className="h-5 w-5 text-[#F7BF24]" />
+          Step 2: Select Services
+        </h3>
+
+        {servicesLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F7BF24]"></div>
+            <span className="ml-3 text-gray-400">Loading services...</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {adminServices.map((service) => {
+              const isSelected = selectedServices.includes(service.id);
+              const IconComponent = service.icon;
+              
+              return (
+                <div
+                  key={service.id}
+                  onClick={() => toggleServiceSelection(service.id)}
+                  className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
+                    isSelected
+                      ? 'bg-[#F7BF24]/10 border-[#F7BF24] ring-1 ring-[#F7BF24]/50'
+                      : 'bg-[#181818] border-gray-600 hover:border-[#F7BF24] hover:bg-[#F7BF24]/5'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#F7BF24]' : 'bg-gray-700'}`}>
+                      <IconComponent className={`h-5 w-5 ${isSelected ? 'text-black' : 'text-gray-300'}`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-white">{service.name}</h4>
+                        {isSelected && <CheckIcon className="h-5 w-5 text-[#F7BF24]" />}
+                      </div>
+                      <p className="text-sm text-gray-400 mb-2">{service.description}</p>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-[#F7BF24] font-medium">${service.price}</span>
+                        <span className="text-gray-400">{service.duration} min</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Selected Services Summary */}
+        {selectedServices.length > 0 && (
+          <div className="mt-6 p-4 bg-[#181818] rounded-lg border border-[#F7BF24]">
+            <h4 className="font-medium text-white mb-3">Selected Services Summary</h4>
+            <div className="space-y-2 mb-4">
+              {adminServices
+                .filter(s => selectedServices.includes(s.id))
+                .map(service => (
+                  <div key={service.id} className="flex justify-between text-sm">
+                    <span className="text-gray-300">{service.name}</span>
+                    <div className="text-right">
+                      <span className="text-[#F7BF24] mr-4">${service.price}</span>
+                      <span className="text-gray-400">{service.duration}min</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+            <div className="border-t border-gray-600 pt-3 flex justify-between">
+              <div>
+                <p className="text-white font-medium">Total: ${subtotal}</p>
+                <p className="text-gray-400 text-sm">Duration: {totalDuration} minutes</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Step 3: Date & Time Selection */}
+      <div className="bg-[#232323] rounded-lg p-6 border border-gray-700">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <CalendarIcon className="h-5 w-5 text-[#F7BF24]" />
+          Step 3: Select Date & Time
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Date Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Select Date
+            </label>
+            <input
+              type="date"
+              value={selectedDate.toISOString().split('T')[0]}
+              onChange={(e) => setSelectedDate(new Date(e.target.value))}
+              min={new Date().toISOString().split('T')[0]}
+              className="w-full px-3 py-2 bg-[#181818] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#F7BF24]"
+            />
+          </div>
+
+          {/* Time Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Available Time Slots
+            </label>
+            {timeLoading ? (
+              <div className="w-full px-3 py-2 bg-[#181818] border border-gray-600 rounded-lg text-gray-400">
+                Loading available times...
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                {availableTimeSlotsData.map((timeSlot) => (
+                  <button
+                    key={timeSlot.time}
+                    onClick={() => setSelectedTime(timeSlot.time)}
+                    disabled={!timeSlot.available}
+                    className={`relative py-3 px-4 rounded-lg border-2 text-center font-medium transition-all duration-200 ${
+                      selectedTime === timeSlot.time
+                        ? "bg-[#F7BF24] text-black border-[#F7BF24]"
+                        : !timeSlot.available
+                        ? "bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed opacity-50"
+                        : "bg-[#232323] text-gray-300 border-gray-600 hover:border-[#F7BF24] hover:text-white"
+                    }`}
+                    type="button"
+                    title={
+                      !timeSlot.available 
+                        ? "This time slot is not available - staff capacity reached" 
+                        : timeSlot.currentBookings > 0
+                        ? `${timeSlot.currentBookings} booking(s) - staff availability confirmed`
+                        : "Available - staff ready to serve"
+                    }
+                  >
+                    {/* Time label always visible */}
+                    <div>{timeSlot.time}</div>
+                    {/* Show yellow 'X booked' only for available slots with bookings */}
+                    {timeSlot.available && timeSlot.currentBookings > 0 && (
+                      <div className="text-xs mt-2 text-yellow-400 font-semibold">{timeSlot.currentBookings} booked</div>
+                    )}
+                    {/* Overlay for full slots */}
+                    {!timeSlot.available && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20 rounded-lg">
+                        <span className="text-sm font-bold text-red-400">N/A</span>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Step 4: Additional Options */}
+      <div className="bg-[#232323] rounded-lg p-6 border border-gray-700">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <StickyNoteIcon className="h-5 w-5 text-[#F7BF24]" />
+          Step 4: Additional Options
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Staff Assignment */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Assign Staff (Optional)
+            </label>
+            <select
+              value={assignedStaffId}
+              onChange={(e) => setAssignedStaffId(e.target.value)}
+              className="w-full px-3 py-2 bg-[#181818] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#F7BF24]"
+            >
+              <option value="">No staff assigned (assign later)</option>
+              {activeStaffList.map((staff) => (
+                <option key={staff.id} value={staff.id.toString()}>
+                  {staff.name} - {staff.role}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Staff can be assigned later from the appointments list
+            </p>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Notes
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Any special requests or notes..."
+              className="w-full px-3 py-2 bg-[#181818] border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#F7BF24]"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
+        <button
+          onClick={onClose}
+          disabled={loading}
+          className="px-6 py-2 text-gray-300 hover:text-white transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleBookingSubmit}
+          disabled={loading || selectedServices.length === 0 || !selectedTime}
+          className="bg-[#F7BF24] hover:bg-[#E5AB20] text-black px-8 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {loading ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></div>
+              Creating...
+            </>
+          ) : (
+            <>
+              <CheckIcon className="h-4 w-4" />
+              Create Appointment
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 function AdminAppointments() {
   const { alert, showWarning, hideAlert } = useAlert();
   // State management following React best practices
@@ -103,25 +920,11 @@ function AdminAppointments() {
   const [activeStaffList, setActiveStaffList] = useState<StaffMember[]>([]);
   const [activeStaffCount, setActiveStaffCount] = useState(0);
   const [availableStaffForSlot, setAvailableStaffForSlot] = useState<StaffMember[]>([]);
-  const [slotAvailabilityCache, setSlotAvailabilityCache] = useState<Map<string, number>>(new Map());
   const [isAssigningStaff, setIsAssigningStaff] = useState(false);
 
   // Services state
   const [servicesList, setServicesList] = useState<ServiceResponse[]>([]);
   const [loadingServices] = useState(false);
-
-  // Form states for add appointment modal
-  const [newAppointment, setNewAppointment] = useState({
-    customerName: "",
-    customerEmail: "",
-    customerPhone: "",
-    customerId: "",
-    service: "",
-    staffId: "",
-    date: "",
-    time: "",
-    notes: "",
-  });
 
   // Error handling state
   const [error, setError] = useState<string | null>(null);
@@ -287,47 +1090,6 @@ function AdminAppointments() {
     }
   };
 
-  // Check slot availability (how many appointments exist for a specific date/time)
-  const checkSlotAvailability = async (date: string, time: string): Promise<number> => {
-    const slotKey = `${date}-${time}`;
-
-    // Check cache first
-    if (slotAvailabilityCache.has(slotKey)) {
-      return slotAvailabilityCache.get(slotKey) || 0;
-    }
-
-    try {
-      const response = await fetch(
-        `http://localhost:8080${API_ENDPOINTS.APPOINTMENTS}/slot?date=${date}&time=${time}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        const slotAppointments: BackendAppointmentDTO[] = await response.json();
-        const bookedCount = slotAppointments.length;
-
-        // Cache the result
-        setSlotAvailabilityCache(
-          (prev) => new Map(prev.set(slotKey, bookedCount))
-        );
-
-        return bookedCount;
-      } else {
-        console.error("Failed to check slot availability:", response.status);
-        return 0;
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      console.error("Error checking slot availability:", errorMessage);
-      return 0;
-    }
-  };
-
   // Helper functions for filter dropdowns
   const getUniqueServices = (): string[] => {
     if (loadingServices || servicesList.length === 0) {
@@ -445,14 +1207,6 @@ function AdminAppointments() {
         // Reload appointments from backend to get fresh data
         await loadAppointments();
 
-        // Clear slot availability cache for this slot
-        const slotKey = `${targetAppointment.date}-${targetAppointment.time}`;
-        setSlotAvailabilityCache((prev) => {
-          const newCache = new Map(prev);
-          newCache.delete(slotKey);
-          return newCache;
-        });
-
         setError(null);
         return true;
       } else {
@@ -505,14 +1259,6 @@ function AdminAppointments() {
         // Reload appointments from backend to get fresh data
         await loadAppointments();
 
-        // Clear slot availability cache for this slot to reflect the change
-        const slotKey = `${targetAppointment.date}-${targetAppointment.time}`;
-        setSlotAvailabilityCache((prev) => {
-          const newCache = new Map(prev);
-          newCache.delete(slotKey);
-          return newCache;
-        });
-
         setError(null);
         return true;
       } else {
@@ -525,95 +1271,6 @@ function AdminAppointments() {
       return false;
     } finally {
       setIsAssigningStaff(false);
-    }
-  };
-
-  // Handle creating new appointment with comprehensive validation
-  const handleCreateAppointment = async (): Promise<void> => {
-    // Input validation
-    if (
-      !newAppointment.customerName ||
-      !newAppointment.service ||
-      !newAppointment.date ||
-      !newAppointment.time
-    ) {
-      setError("Please fill all required fields.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Check slot availability before booking
-      const bookedCount = await checkSlotAvailability(
-        newAppointment.date,
-        newAppointment.time
-      );
-
-      if (bookedCount >= activeStaffCount) {
-        setError(
-          `This time slot is fully booked. There are ${activeStaffCount} active staff members and ${bookedCount} appointments already booked for this slot.`
-        );
-        return;
-      }
-
-      // Prepare data for backend API following international standards
-      const appointmentData = {
-        customerName: newAppointment.customerName.trim(),
-        customerPhone: newAppointment.customerPhone || "000-000-0000", // Default if not provided
-        services: newAppointment.service, // Single service for now
-        date: newAppointment.date, // Already in ISO format (YYYY-MM-DD)
-        time: newAppointment.time + ":00", // Convert HH:MM to HH:MM:SS for backend
-        notes: newAppointment.notes?.trim() || null,
-        userId: null, // No staff assignment for now
-      };
-
-      const response = await fetch(
-        `http://localhost:8080${API_ENDPOINTS.APPOINTMENTS}/book`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(appointmentData),
-        }
-      );
-
-      if (response.ok) {
-        // Reset form
-        setNewAppointment({
-          customerName: "",
-          customerEmail: "",
-          customerPhone: "",
-          customerId: "",
-          service: "",
-          staffId: "",
-          date: "",
-          time: "",
-          notes: "",
-        });
-
-        setShowAddModal(false);
-
-        // Clear slot availability cache for this slot
-        const slotKey = `${newAppointment.date}-${newAppointment.time}`;
-        setSlotAvailabilityCache((prev) => {
-          const newCache = new Map(prev);
-          newCache.delete(slotKey);
-          return newCache;
-        });
-
-        // Reload appointments to show the new one
-        await loadAppointments();
-      } else {
-        await response.text();
-        setError("Failed to create appointment. Please try again.");
-      }
-    } catch (error) {
-      setError("Network error. Please check your connection and try again.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -1601,7 +2258,7 @@ function AdminAppointments() {
         {/* Add Appointment Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-gray-800 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-700">
+            <div className="bg-black/50 rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-700">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-white">
                   Add New Appointment
@@ -1614,281 +2271,12 @@ function AdminAppointments() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Customer Selection or Manual Entry */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Select Existing Customer or Add New
-                  </label>
-                  <select
-                    value={newAppointment.customerId}
-                    onChange={(e) => {
-                      const selectedCustomer = customers.find(
-                        (c) => c.id === e.target.value
-                      );
-                      if (selectedCustomer) {
-                        setNewAppointment((prev) => ({
-                          ...prev,
-                          customerId: selectedCustomer.id,
-                          customerName: selectedCustomer.name,
-                          customerEmail: selectedCustomer.email,
-                          customerPhone: selectedCustomer.phone,
-                        }));
-                      } else {
-                        setNewAppointment((prev) => ({
-                          ...prev,
-                          customerId: "",
-                          customerName: "",
-                          customerEmail: "",
-                          customerPhone: "",
-                        }));
-                      }
-                    }}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">Add New Customer</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name} ({customer.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Customer Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={newAppointment.customerName}
-                    onChange={(e) =>
-                      setNewAppointment((prev) => ({
-                        ...prev,
-                        customerName: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="Enter customer name"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Customer Email
-                  </label>
-                  <input
-                    type="email"
-                    value={newAppointment.customerEmail}
-                    onChange={(e) =>
-                      setNewAppointment((prev) => ({
-                        ...prev,
-                        customerEmail: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="customer@email.com"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Customer Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={newAppointment.customerPhone}
-                    onChange={(e) =>
-                      setNewAppointment((prev) => ({
-                        ...prev,
-                        customerPhone: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="+1 (555) 123-4567"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Service *
-                  </label>
-                  <select
-                    value={newAppointment.service}
-                    onChange={(e) =>
-                      setNewAppointment((prev) => ({
-                        ...prev,
-                        service: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  >
-                    <option value="">Select Service</option>
-                    {services.map((service) => (
-                      <option key={service.id} value={service.name}>
-                        {service.name} ({service.duration} min)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Staff Member (Optional)
-                  </label>
-                  <select
-                    value={newAppointment.staffId}
-                    onChange={(e) =>
-                      setNewAppointment((prev) => ({
-                        ...prev,
-                        staffId: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">No staff assigned</option>
-                    {activeStaffList.map((staff: StaffMember) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name} - {staff.role}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Staff assignment can be done later
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={newAppointment.date}
-                    onChange={(e) =>
-                      setNewAppointment((prev) => ({
-                        ...prev,
-                        date: e.target.value,
-                      }))
-                    }
-                    min={new Date().toISOString().split("T")[0]}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Time *
-                  </label>
-                  <select
-                    value={newAppointment.time}
-                    onChange={(e) =>
-                      setNewAppointment((prev) => ({
-                        ...prev,
-                        time: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  >
-                    <option value="">Select Time</option>
-                    {availableTimeSlots.map((time) => (
-                      <option key={time} value={time}>
-                        {formatTimeForDisplay(time)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Notes (Optional)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={newAppointment.notes}
-                    onChange={(e) =>
-                      setNewAppointment((prev) => ({
-                        ...prev,
-                        notes: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="Any special requirements or notes..."
-                  />
-                </div>
-
-                {/* Service Preview */}
-                {newAppointment.service && (
-                  <div className="md:col-span-2 bg-gray-700/30 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-gray-300 mb-2">
-                      Appointment Preview
-                    </h4>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-400">Service:</span>
-                        <span className="text-white ml-2">
-                          {newAppointment.service}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">Staff:</span>
-                        <span className="text-white ml-2">
-                          {activeStaffList.find(
-                            (s: StaffMember) => s.id.toString() === newAppointment.staffId
-                          )?.name || "Not selected"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">Duration:</span>
-                        <span className="text-white ml-2">
-                          {services.find(
-                            (s) => s.name === newAppointment.service
-                          )?.duration || 60}{" "}
-                          min
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setNewAppointment({
-                      customerName: "",
-                      customerEmail: "",
-                      customerPhone: "",
-                      customerId: "",
-                      service: "",
-                      staffId: "",
-                      date: "",
-                      time: "",
-                      notes: "",
-                    });
-                  }}
-                  className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateAppointment}
-                  disabled={
-                    !newAppointment.customerName ||
-                    !newAppointment.service ||
-                    !newAppointment.date ||
-                    !newAppointment.time
-                  }
-                  className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-6 py-2 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Create Appointment
-                </button>
-              </div>
+              <AdminBookingForm 
+                onClose={() => setShowAddModal(false)}
+                onAppointmentCreated={loadAppointments}
+                activeStaffList={activeStaffList}
+                servicesList={servicesList}
+              />
             </div>
           </div>
         )}

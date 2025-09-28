@@ -9,6 +9,7 @@ export interface AppointmentRequest {
   time: string; // Time string (HH:MM)
   notes?: string;
   userId?: number;
+  staffId?: number;
 }
 
 export interface AppointmentResponse {

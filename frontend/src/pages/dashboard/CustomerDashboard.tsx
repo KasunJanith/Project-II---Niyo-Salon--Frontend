@@ -211,7 +211,7 @@ const CustomerDashboard = () => {
           </div>
           <div className="flex items-center space-x-4">
             <button
-              onClick={() => navigate('/appointment')}
+              onClick={() => navigate('../appointments')}
               className="bg-[#F7BF24] text-black px-6 py-2 rounded-lg font-medium hover:bg-[#F7BF24]/90 transition-colors flex items-center gap-2"
             >
               <PlusIcon size={20} />
