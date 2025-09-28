@@ -135,14 +135,14 @@ const VirtualTryOnPage = () => {
       console.error('Canvas context not available');
       return;
     }
-    ctx.clearRect(0, 0, 640, 480);
+    ctx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
 
     // Draw the camera feed as background
-    ctx.drawImage(videoRef.current, 0, 0, 640, 480);
+    ctx.drawImage(videoRef.current, 0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
 
     // Apply segmentation mask to isolate the person
     ctx.globalCompositeOperation = 'source-in';
-    ctx.drawImage(results.segmentationMask, 0, 0, 640, 480);
+    ctx.drawImage(results.segmentationMask, 0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
 
     // Reset composite operation for drawing the overlay
     ctx.globalCompositeOperation = 'source-over';
@@ -154,16 +154,16 @@ const VirtualTryOnPage = () => {
       const leftEye = landmarks.getLeftEye();
       const rightEye = landmarks.getRightEye();
 
-      console.log('Landmarks detected:', { nose, leftEye, rightEye }); // Debug landmark detection
+      console.log('Landmarks detected:', { nose, leftEye, rightEye });
       if (!nose || !leftEye || !rightEye) {
         console.warn('Incomplete facial landmarks');
         return;
       }
 
-      const headWidth = Math.abs(rightEye.x - leftEye.x) * 640;
+      const headWidth = Math.abs(rightEye.x - leftEye.x) * previewCanvasRef.current.width;
       const headHeight = headWidth * 1.2;
-      const x = (nose.x * 640) - (headWidth / 2);
-      const y = (nose.y * 480) - (headHeight / 2);
+      const x = (nose.x * previewCanvasRef.current.width) - (headWidth / 2);
+      const y = (nose.y * previewCanvasRef.current.height) - (headHeight / 2);
 
       ctx.drawImage(overlayImageRef.current, x, y, headWidth, headHeight);
     } else {
@@ -249,8 +249,7 @@ const VirtualTryOnPage = () => {
     const loadModels = async () => {
       try {
         await tf.ready();
-        await tf.setBackend('webgl');
-
+        await tf.setBackend('webgl'); // Ensure WebGL backend is set
         const MODEL_URL = '/models';
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
@@ -273,6 +272,7 @@ const VirtualTryOnPage = () => {
         selfieSegmentation.current.setOptions({
           modelSelection: 1,
           selfieMode: true,
+          minDetectionConfidence: 0.5, // Lower confidence to avoid missing detections
         });
 
         selfieSegmentation.current.onResults(onSegmentationResults);
@@ -290,17 +290,28 @@ const VirtualTryOnPage = () => {
       const overlayInterval = setInterval(async () => {
         if (videoRef.current && selfieSegmentation.current) {
           try {
-            await selfieSegmentation.current.send({ image: videoRef.current });
-            const detections = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
-            if (detections) {
-              faceLandmarksRef.current = detections.landmarks;
-              console.log('Face landmarks updated:', detections.landmarks); // Debug
+            const videoWidth = videoRef.current.videoWidth;
+            const videoHeight = videoRef.current.videoHeight;
+            if (videoWidth && videoHeight) {
+              previewCanvasRef.current.width = videoWidth;
+              previewCanvasRef.current.height = videoHeight;
+              // Debug WebGL context
+              const gl = document.createElement('canvas').getContext('webgl2');
+              console.log('WebGL2 supported:', !!gl);
+              await selfieSegmentation.current.send({ image: videoRef.current });
+              const detections = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+              if (detections) {
+                faceLandmarksRef.current = detections.landmarks;
+                console.log('Face landmarks updated:', detections.landmarks);
+              } else {
+                console.warn('No face detected in current frame');
+              }
             } else {
-              console.warn('No face detected in current frame');
+              console.warn('Video dimensions not available yet');
             }
           } catch (err) {
             console.error('Segmentation or landmark detection error:', err);
-            setError('Error processing video feed. Check console for details.');
+            setError('Error processing video feed. Check console for details. Try restarting the camera.');
           }
         }
       }, 100);
@@ -316,7 +327,7 @@ const VirtualTryOnPage = () => {
       img.src = selectedStyle.overlay || selectedStyle.image;
       img.onload = () => {
         overlayImageRef.current = img;
-        console.log('Overlay image loaded:', selectedStyle.overlay); // Debug
+        console.log('Overlay image loaded:', selectedStyle.overlay);
       };
       img.onerror = () => {
         console.error('Failed to load overlay image:', selectedStyle.overlay);
@@ -325,7 +336,7 @@ const VirtualTryOnPage = () => {
         fallbackImg.src = selectedStyle.image;
         fallbackImg.onload = () => {
           overlayImageRef.current = fallbackImg;
-          console.log('Fallback image loaded:', selectedStyle.image); // Debug
+          console.log('Fallback image loaded:', selectedStyle.image);
         };
         fallbackImg.onerror = () => {
           console.error('Failed to load fallback image:', selectedStyle.image);
@@ -337,7 +348,7 @@ const VirtualTryOnPage = () => {
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480 },
+        video: { width: { ideal: 640 }, height: { ideal: 480 } },
       });
 
       if (videoRef.current) {
@@ -380,10 +391,10 @@ const VirtualTryOnPage = () => {
     setSuggestedStyles([]);
     setSelectedStyle(null);
     if (previewCanvasRef.current) {
-      previewCanvasRef.current.getContext('2d').clearRect(0, 0, 640, 480);
+      previewCanvasRef.current.getContext('2d').clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
     }
     if (canvasRef.current) {
-      canvasRef.current.getContext('2d').clearRect(0, 0, 640, 480);
+      canvasRef.current.getContext('2d').clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
   };
 

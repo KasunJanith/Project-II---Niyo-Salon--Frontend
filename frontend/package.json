@@ -3,7 +3,6 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  
   "scripts": {
     "dev": "npx vite",
     "build": "npx vite build",
@@ -13,6 +12,8 @@
   "dependencies": {
     "@mediapipe/face_mesh": "^0.4.1633559619",
     "@mediapipe/selfie_segmentation": "^0.1.1675465747",
+    "@react-three/drei": "^9.89.7",
+    "@react-three/fiber": "^8.13.7",
     "@tensorflow-models/blazeface": "^0.1.0",
     "@tensorflow/tfjs": "^4.22.0",
     "aos": "^2.3.4",
@@ -24,9 +25,7 @@
     "react-datepicker": "^8.4.0",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
-    "three": "^0.155.0",
-    "@react-three/fiber": "^8.13.7",
-    "@react-three/drei": "^9.89.7"
+    "three": "^0.155.0"
   },
   "devDependencies": {
     "@types/aos": "^3.0.7",
