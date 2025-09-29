@@ -33,6 +33,21 @@ const Navbar = () => {
     navigate('/login');
   };
 
+  const handleDashboardRedirect = (role: string | undefined) => {
+    switch (role?.toLowerCase()) {
+      case 'admin':
+        navigate('/dashboard/admin');
+        break;
+      case 'staff':
+        navigate('/dashboard/staff');
+        break;
+      case 'customer':
+      default:
+        navigate('/dashboard/customer');
+        break;
+    }
+  };
+
   return (
     <nav className="bg-[#212121] backdrop-blur-md sticky top-0 z-50 font-inter border-b border-[#F7BF24]/20">
       {/* Subtle Top Accent */}
@@ -103,12 +118,15 @@ const Navbar = () => {
               </div>
             ) : (
               <div className="hidden md:flex items-center gap-4">
-                <div className="flex items-center gap-3 px-4 py-1 bg-black/30 rounded-full border border-[#F7BF24]/20">
+                <button
+                  onClick={() => handleDashboardRedirect(user.role)}
+                  className="flex items-center gap-3 px-4 py-1 bg-black/30 rounded-full border border-[#F7BF24]/20 hover:bg-black/50 hover:border-[#F7BF24]/40 transition-all duration-300 cursor-pointer"
+                >
                   <div className="w-8 h-8 bg-gradient-to-br from-[#F7BF24] to-yellow-500 rounded-full flex items-center justify-center text-black font-bold text-sm">
                     {user.username?.charAt(0).toUpperCase()}
                   </div>
                   <span className="text-white font-medium text-sm">{user.username}</span>
-                </div>
+                </button>
                 <button
                   onClick={handleLogout}
                   className="px-4 py-2 text-sm font-semibold text-white border border-red-500/50 rounded-lg hover:border-red-500 hover:bg-red-500/10 transition-all duration-300"
@@ -176,12 +194,18 @@ const Navbar = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-black/30 rounded-lg">
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      handleDashboardRedirect(user.role);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 bg-black/30 rounded-lg hover:bg-black/50 transition-all duration-300"
+                  >
                     <div className="w-8 h-8 bg-gradient-to-br from-[#F7BF24] to-yellow-500 rounded-full flex items-center justify-center text-black font-bold text-sm">
                       {user.username?.charAt(0).toUpperCase()}
                     </div>
                     <span className="text-white font-medium">{user.username}</span>
-                  </div>
+                  </button>
                   <button
                     onClick={() => {
                       setIsMenuOpen(false);
