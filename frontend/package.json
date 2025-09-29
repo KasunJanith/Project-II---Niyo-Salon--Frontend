@@ -12,9 +12,11 @@
   "dependencies": {
     "@mediapipe/face_mesh": "^0.4.1633559619",
     "@mediapipe/selfie_segmentation": "^0.1.1675465747",
+    "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
     "@react-three/drei": "^9.89.7",
     "@react-three/fiber": "^8.13.7",
     "@tensorflow-models/blazeface": "^0.1.0",
+    "@tensorflow-models/face-landmarks-detection": "^1.0.6",
     "@tensorflow/tfjs": "^4.22.0",
     "aos": "^2.3.4",
     "axios": "^1.12.2",
