@@ -26,7 +26,7 @@ export const generateWithHuggingFace = async (options: AIGenerationOptions): Pro
     const response = await fetch('https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5', {
       method: 'POST',
       headers: {
-        'Authorization': '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', // Get free token from huggingface.co
+        'Authorization': 'hf_wJYXHQEQcMekiJTtFZKaRLOEQXSToTUMt', // Get free token from huggingface.co
       },
       body: formData
     });
