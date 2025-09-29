@@ -1,315 +1,316 @@
-import React, { useState } from 'react';
-import { UserIcon, CalendarIcon, BellIcon, SettingsIcon, LockIcon, CameraIcon } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { UserIcon, EditIcon, CameraIcon, SaveIcon, PhoneIcon, MailIcon, LockIcon } from 'lucide-react';
+import useUserData from '../hooks/useUserData';
+
 const ProfilePage = () => {
-  const [activeTab, setActiveTab] = useState('personal');
-  // Mock user data
-  const user = {
-    name: 'Alex Johnson',
-    email: 'alex.johnson@example.com',
-    phone: '(555) 123-4567',
-    address: '123 Main St, Anytown, CA 12345',
-    profileImage: null,
-    joinDate: 'January 2023',
-    preferredStaff: 'Jamie Rodriguez'
+  const userData = useUserData();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
+
+  // Update form data when userData changes
+  useEffect(() => {
+    if (userData) {
+      if (userData.id !== -1) {
+        setFormData({
+          name: userData.username || '',
+          email: '', // Add email field when available in userData
+          phone: userData.phoneNumber || '',
+          address: '' // Add address field when available in userData
+        });
+      }
+      setIsLoading(false);
+    }
+  }, [userData]);
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setProfileImage(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
-  // Mock appointment history
-  const appointmentHistory = [{
-    id: 1,
-    service: 'Haircut & Styling',
-    staff: 'Jamie Rodriguez',
-    date: 'June 1, 2023',
-    time: '10:00 AM',
-    status: 'completed',
-    amount: '$30'
-  }, {
-    id: 2,
-    service: 'Beard Trim',
-    staff: 'Alex Kim',
-    date: 'May 15, 2023',
-    time: '2:30 PM',
-    status: 'completed',
-    amount: '$20'
-  }, {
-    id: 3,
-    service: 'Custom Tattoo',
-    staff: 'Taylor Morgan',
-    date: 'April 28, 2023',
-    time: '1:00 PM',
-    status: 'completed',
-    amount: '$150'
-  }];
-  // Mock notification settings
-  const notificationSettings = [{
-    id: 'email_appt',
-    label: 'Email appointment reminders',
-    checked: true
-  }, {
-    id: 'sms_appt',
-    label: 'SMS appointment reminders',
-    checked: true
-  }, {
-    id: 'email_promo',
-    label: 'Email promotions and news',
-    checked: false
-  }, {
-    id: 'sms_promo',
-    label: 'SMS promotions and news',
-    checked: false
-  }];
-  return <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Your Profile</h1>
-      <div className="flex flex-col md:flex-row gap-8">
-        <div className="md:w-1/4">
-          <div className="bg-white rounded-lg shadow-md overflow-hidden sticky top-20">
-            <div className="p-6 text-center border-b border-gray-200">
-              <div className="relative inline-block mb-4">
-                <div className="h-24 w-24 rounded-full bg-purple-100 flex items-center justify-center mx-auto">
-                  {user.profileImage ? <img src={user.profileImage} alt={user.name} className="h-24 w-24 rounded-full object-cover" /> : <UserIcon size={48} className="text-purple-700" />}
-                </div>
-                <button className="absolute bottom-0 right-0 bg-purple-700 text-white p-1 rounded-full">
-                  <CameraIcon size={16} />
-                </button>
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                {user.name}
-              </h2>
-              <p className="text-gray-600 text-sm">
-                Member since {user.joinDate}
-              </p>
-            </div>
-            <nav className="p-4">
-              <button className={`flex items-center w-full px-4 py-2 mb-2 rounded-md text-left ${activeTab === 'personal' ? 'bg-purple-100 text-purple-700' : 'text-gray-700 hover:bg-gray-100'}`} onClick={() => setActiveTab('personal')}>
-                <UserIcon size={18} className="mr-3" />
-                Personal Information
-              </button>
-              <button className={`flex items-center w-full px-4 py-2 mb-2 rounded-md text-left ${activeTab === 'appointments' ? 'bg-purple-100 text-purple-700' : 'text-gray-700 hover:bg-gray-100'}`} onClick={() => setActiveTab('appointments')}>
-                <CalendarIcon size={18} className="mr-3" />
-                Appointment History
-              </button>
-              <button className={`flex items-center w-full px-4 py-2 mb-2 rounded-md text-left ${activeTab === 'notifications' ? 'bg-purple-100 text-purple-700' : 'text-gray-700 hover:bg-gray-100'}`} onClick={() => setActiveTab('notifications')}>
-                <BellIcon size={18} className="mr-3" />
-                Notification Settings
-              </button>
-              <button className={`flex items-center w-full px-4 py-2 mb-2 rounded-md text-left ${activeTab === 'security' ? 'bg-purple-100 text-purple-700' : 'text-gray-700 hover:bg-gray-100'}`} onClick={() => setActiveTab('security')}>
-                <LockIcon size={18} className="mr-3" />
-                Security
-              </button>
-              <button className={`flex items-center w-full px-4 py-2 rounded-md text-left ${activeTab === 'preferences' ? 'bg-purple-100 text-purple-700' : 'text-gray-700 hover:bg-gray-100'}`} onClick={() => setActiveTab('preferences')}>
-                <SettingsIcon size={18} className="mr-3" />
-                Preferences
-              </button>
-            </nav>
-          </div>
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleSave = () => {
+    // Save functionality would go here
+    console.log('Saving profile data:', formData);
+    setIsEditing(false);
+  };
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#F7BF24] mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading profile...</p>
         </div>
-        <div className="md:w-3/4">
-          {activeTab === 'personal' && <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Personal Information
+      </div>
+    );
+  }
+
+  // Show error state if user is not authenticated
+  if (!userData || userData.id === -1) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <UserIcon size={64} className="text-gray-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2">Authentication Required</h2>
+          <p className="text-gray-400 mb-6">Please log in to view your profile</p>
+          <button 
+            onClick={() => window.location.href = '/login'}
+            className="bg-[#F7BF24] text-black px-6 py-2 rounded-lg font-medium hover:bg-[#F7BF24]/80 transition-colors duration-200"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-[#F7BF24] mb-2">My Profile</h1>
+          <p className="text-gray-400">Manage your account information</p>
+        </div>
+
+        {/* Main Profile Card */}
+        <div className="bg-[#181818] rounded-xl border border-gray-700 overflow-hidden">
+          {/* Profile Header */}
+          <div className="bg-gradient-to-r from-[#F7BF24]/20 to-transparent p-8 border-b border-gray-700">
+            <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+              {/* Profile Picture */}
+              <div className="relative">
+                <div className="h-32 w-32 rounded-full bg-[#F7BF24]/20 border-2 border-[#F7BF24] flex items-center justify-center overflow-hidden">
+                  {profileImage ? (
+                    <img 
+                      src={profileImage} 
+                      alt="Profile" 
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <UserIcon size={64} className="text-[#F7BF24]" />
+                  )}
+                </div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 bg-[#F7BF24] text-black p-3 rounded-full hover:bg-[#F7BF24]/80 transition-colors duration-200"
+                >
+                  <CameraIcon size={20} />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Profile Info */}
+              <div className="flex-1 text-center md:text-left">
+                <h2 className="text-3xl font-bold text-white mb-2">
+                  {userData?.username || 'User'}
                 </h2>
-                <button className="text-sm text-purple-700 hover:text-purple-900 font-medium">
-                  Edit
+                <p className="text-gray-400 mb-2">
+                  Role: {userData?.role || 'Customer'}
+                </p>
+                <p className="text-gray-400 mb-4">
+                  ID: #{userData?.id || '000000'}
+                </p>
+                <button
+                  onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                  className="bg-[#F7BF24] text-black px-6 py-2 rounded-lg font-medium hover:bg-[#F7BF24]/80 transition-colors duration-200 flex items-center gap-2 mx-auto md:mx-0"
+                >
+                  {isEditing ? (
+                    <>
+                      <SaveIcon size={18} />
+                      Save Changes
+                    </>
+                  ) : (
+                    <>
+                      <EditIcon size={18} />
+                      Edit Profile
+                    </>
+                  )}
                 </button>
               </div>
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">
-                      Full Name
-                    </h3>
-                    <p className="text-gray-900">{user.name}</p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">
-                      Email Address
-                    </h3>
-                    <p className="text-gray-900">{user.email}</p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">
-                      Phone Number
-                    </h3>
-                    <p className="text-gray-900">{user.phone}</p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">
-                      Address
-                    </h3>
-                    <p className="text-gray-900">{user.address}</p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">
-                      Preferred Staff
-                    </h3>
-                    <p className="text-gray-900">{user.preferredStaff}</p>
-                  </div>
-                </div>
-              </div>
-            </div>}
-          {activeTab === 'appointments' && <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Appointment History
-                </h2>
-              </div>
-              <div className="p-6">
-                {appointmentHistory.length > 0 ? <div className="space-y-6">
-                    {appointmentHistory.map(appointment => <div key={appointment.id} className="border-b border-gray-200 pb-6 last:border-b-0 last:pb-0">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-semibold text-gray-900">
-                            {appointment.service}
-                          </h3>
-                          <span className="text-purple-700 font-medium">
-                            {appointment.amount}
-                          </span>
-                        </div>
-                        <p className="text-gray-600 mb-2">
-                          with {appointment.staff}
-                        </p>
-                        <div className="flex items-center text-gray-500 mb-4">
-                          <CalendarIcon size={16} className="mr-1" />
-                          <span>
-                            {appointment.date}, {appointment.time}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            Completed
-                          </span>
-                          <button className="text-sm text-purple-700 hover:text-purple-900 font-medium">
-                            Book Again
-                          </button>
-                        </div>
-                      </div>)}
-                  </div> : <div className="text-center py-8">
-                    <p className="text-gray-500 mb-4">
-                      You don't have any appointment history yet.
-                    </p>
-                    <button className="bg-purple-700 text-white px-4 py-2 rounded-md hover:bg-purple-800">
-                      Book Your First Appointment
-                    </button>
-                  </div>}
-              </div>
-            </div>}
-          {activeTab === 'notifications' && <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Notification Settings
-                </h2>
-              </div>
-              <div className="p-6">
-                <div className="space-y-4">
-                  {notificationSettings.map(setting => <div key={setting.id} className="flex items-center">
-                      <input id={setting.id} type="checkbox" className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded" defaultChecked={setting.checked} />
-                      <label htmlFor={setting.id} className="ml-3 text-gray-700">
-                        {setting.label}
-                      </label>
-                    </div>)}
-                </div>
-                <div className="mt-6">
-                  <button className="bg-purple-700 text-white px-4 py-2 rounded-md hover:bg-purple-800">
-                    Save Changes
-                  </button>
-                </div>
-              </div>
-            </div>}
-          {activeTab === 'security' && <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Security
-                </h2>
-              </div>
-              <div className="p-6">
-                <h3 className="font-medium text-gray-900 mb-4">
-                  Change Password
+            </div>
+          </div>
+
+          {/* Profile Details */}
+          <div className="p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Personal Information */}
+              <div>
+                <h3 className="text-xl font-semibold text-[#F7BF24] mb-6 flex items-center gap-2">
+                  <UserIcon size={24} />
+                  Personal Information
                 </h3>
-                <form className="space-y-4">
+                <div className="space-y-6">
                   <div>
-                    <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 mb-1">
-                      Current Password
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Username
                     </label>
-                    <input type="password" id="current-password" className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500" />
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-[#2a2a2a] border border-gray-600 rounded-lg text-white focus:border-[#F7BF24] focus:outline-none transition-colors duration-200"
+                        placeholder="Enter your username"
+                      />
+                    ) : (
+                      <p className="text-white bg-[#2a2a2a] px-4 py-3 rounded-lg">
+                        {userData?.username || 'Not provided'}
+                      </p>
+                    )}
                   </div>
+
                   <div>
-                    <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">
-                      New Password
+                    <label className="text-sm font-medium text-gray-400 mb-2 flex items-center gap-2">
+                      <PhoneIcon size={16} />
+                      Phone Number
                     </label>
-                    <input type="password" id="new-password" className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500" />
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-[#2a2a2a] border border-gray-600 rounded-lg text-white focus:border-[#F7BF24] focus:outline-none transition-colors duration-200"
+                        placeholder="Enter your phone number"
+                      />
+                    ) : (
+                      <p className="text-white bg-[#2a2a2a] px-4 py-3 rounded-lg">
+                        {userData?.phoneNumber || 'Not provided'}
+                      </p>
+                    )}
                   </div>
+
                   <div>
-                    <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
-                      Confirm New Password
+                    <label className="text-sm font-medium text-gray-400 mb-2 flex items-center gap-2">
+                      <MailIcon size={16} />
+                      Email Address
                     </label>
-                    <input type="password" id="confirm-password" className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500" />
+                    {isEditing ? (
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-[#2a2a2a] border border-gray-600 rounded-lg text-white focus:border-[#F7BF24] focus:outline-none transition-colors duration-200"
+                        placeholder="Enter your email address"
+                      />
+                    ) : (
+                      <p className="text-white bg-[#2a2a2a] px-4 py-3 rounded-lg">
+                        {formData.email || 'Not provided'}
+                      </p>
+                    )}
                   </div>
+
                   <div>
-                    <button type="submit" className="bg-purple-700 text-white px-4 py-2 rounded-md hover:bg-purple-800">
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Address
+                    </label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        name="address"
+                        value={formData.address}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 bg-[#2a2a2a] border border-gray-600 rounded-lg text-white focus:border-[#F7BF24] focus:outline-none transition-colors duration-200"
+                        placeholder="Enter your address"
+                      />
+                    ) : (
+                      <p className="text-white bg-[#2a2a2a] px-4 py-3 rounded-lg">
+                        {formData.address || 'Not provided'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Security Section */}
+              <div>
+                <h3 className="text-xl font-semibold text-[#F7BF24] mb-6 flex items-center gap-2">
+                  <LockIcon size={24} />
+                  Security
+                </h3>
+                <div className="bg-[#2a2a2a] p-6 rounded-lg border border-gray-600">
+                  <h4 className="text-lg font-medium text-white mb-4">Change Password</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        Current Password
+                      </label>
+                      <input
+                        type="password"
+                        className="w-full px-4 py-3 bg-[#181818] border border-gray-600 rounded-lg text-white focus:border-[#F7BF24] focus:outline-none transition-colors duration-200"
+                        placeholder="Enter current password"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        New Password
+                      </label>
+                      <input
+                        type="password"
+                        className="w-full px-4 py-3 bg-[#181818] border border-gray-600 rounded-lg text-white focus:border-[#F7BF24] focus:outline-none transition-colors duration-200"
+                        placeholder="Enter new password"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        Confirm New Password
+                      </label>
+                      <input
+                        type="password"
+                        className="w-full px-4 py-3 bg-[#181818] border border-gray-600 rounded-lg text-white focus:border-[#F7BF24] focus:outline-none transition-colors duration-200"
+                        placeholder="Confirm new password"
+                      />
+                    </div>
+                    <button className="w-full bg-[#F7BF24] text-black py-3 rounded-lg font-medium hover:bg-[#F7BF24]/80 transition-colors duration-200">
                       Update Password
                     </button>
                   </div>
-                </form>
-              </div>
-            </div>}
-          {activeTab === 'preferences' && <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Preferences
-                </h2>
-              </div>
-              <div className="p-6">
-                <div className="mb-6">
-                  <h3 className="font-medium text-gray-900 mb-4">
-                    Appointment Preferences
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="preferred-staff" className="block text-sm font-medium text-gray-700 mb-1">
-                        Preferred Staff
-                      </label>
-                      <select id="preferred-staff" className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500" defaultValue={user.preferredStaff}>
-                        <option>No preference</option>
-                        <option>Jamie Rodriguez</option>
-                        <option>Alex Kim</option>
-                        <option>Taylor Morgan</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="preferred-day" className="block text-sm font-medium text-gray-700 mb-1">
-                        Preferred Day
-                      </label>
-                      <select id="preferred-day" className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500">
-                        <option>No preference</option>
-                        <option>Monday</option>
-                        <option>Tuesday</option>
-                        <option>Wednesday</option>
-                        <option>Thursday</option>
-                        <option>Friday</option>
-                        <option>Saturday</option>
-                        <option>Sunday</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="preferred-time" className="block text-sm font-medium text-gray-700 mb-1">
-                        Preferred Time
-                      </label>
-                      <select id="preferred-time" className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500">
-                        <option>No preference</option>
-                        <option>Morning (9AM - 12PM)</option>
-                        <option>Afternoon (12PM - 5PM)</option>
-                        <option>Evening (5PM - 8PM)</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <button className="bg-purple-700 text-white px-4 py-2 rounded-md hover:bg-purple-800">
-                    Save Preferences
-                  </button>
                 </div>
               </div>
-            </div>}
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="mt-8 text-center">
+          <p className="text-gray-400 mb-4">Need help with your account?</p>
+          <button className="text-[#F7BF24] hover:text-[#F7BF24]/80 font-medium transition-colors duration-200">
+            Contact Support
+          </button>
         </div>
       </div>
-    </div>;
+    </div>
+  );
 };
+
 export default ProfilePage;
