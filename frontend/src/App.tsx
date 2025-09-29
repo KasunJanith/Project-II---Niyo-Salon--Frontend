@@ -28,8 +28,8 @@ import useUserData from "./hooks/useUserData";
 import "aos/dist/aos.css";
 import AOS from "aos"; // <-- Import AOS
 import AboutUsPage from "./pages/AboutUsPage";
-import AdminUpload from './pages/dashboard/Admin/AdminUpload';
-import VirtualTryOnPage from './pages/VirtualTryOnPage';
+import AdminUpload from "./pages/dashboard/Admin/AdminUpload";
+import VirtualTryOnPage from "./pages/VirtualTryOnPage";
 
 type ProtectedRouteProps = {
   children: ReactNode;
@@ -77,14 +77,14 @@ export function App() {
             </ProtectedRoute>
           }
         />
-        <Route
+        {/* <Route
           path="dashboard/customer"
           element={
             <ProtectedRoute allowedRoles={["customer"]}>
               <CustomerDashboard />
             </ProtectedRoute>
           }
-        />
+        /> */}
         <Route
           path="dashboard/staff"
           element={
@@ -164,14 +164,14 @@ export function App() {
           <Route path="login" element={<LoginPage />} />
           <Route path="register" element={<RegisterPage />} />
           <Route path="virtual-try-on" element={<VirtualTryOnPage />} />
-          {/* <Route
-            path="virtual-try-on"
+          <Route
+            path="dashboard/customer"
             element={
-              <ProtectedRoute allowedRoles={["customer", "staff", "admin"]}>
-                <AppointmentPage />
+              <ProtectedRoute allowedRoles={["customer"]}>
+                <CustomerDashboard />
               </ProtectedRoute>
             }
-          /> */}
+          />
 
           <Route
             path="appointments"

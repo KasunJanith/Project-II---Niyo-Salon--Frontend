@@ -109,10 +109,12 @@ class BookingService {
   // Check time slot availability
   async checkTimeSlotAvailability(request: TimeSlotAvailabilityRequest): Promise<boolean> {
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/appointments/check-availability`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
         },
         body: JSON.stringify(request),
       });
@@ -144,8 +146,13 @@ class BookingService {
   // Update appointment status
   async updateAppointmentStatus(id: number, status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'): Promise<AppointmentResponse> {
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/appointments/${id}/status?status=${status}`, {
         method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
       });
       
       if (!response.ok) {
@@ -161,8 +168,13 @@ class BookingService {
   // Cancel appointment
   async cancelAppointment(id: number): Promise<AppointmentResponse> {
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/appointments/${id}/cancel`, {
         method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
       });
       
       if (!response.ok) {
@@ -187,6 +199,52 @@ class BookingService {
       }
     } catch (error) {
       console.error('Error deleting appointment:', error);
+      throw error;
+    }
+  }
+
+  // Update appointment (for rescheduling)
+  async updateAppointment(id: number, updateData: Partial<AppointmentRequest>): Promise<AppointmentResponse> {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/appointments/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: JSON.stringify(updateData),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating appointment:', error);
+      throw error;
+    }
+  }
+
+  // Reschedule appointment using update method
+  async rescheduleAppointment(id: number, newDate: string, newTime: string, reason?: string): Promise<AppointmentResponse> {
+    try {
+      // Update the appointment with new date, time, and reset status to PENDING
+      const updateData = {
+        date: newDate,
+        time: newTime,
+        notes: reason || 'Rescheduled appointment'
+      };
+      
+      // First update the appointment data
+      const updatedAppointment = await this.updateAppointment(id, updateData);
+      
+      // Then reset status to PENDING since it's been rescheduled
+      await this.updateAppointmentStatus(id, 'PENDING');
+      
+      return updatedAppointment;
+    } catch (error) {
+      console.error('Error rescheduling appointment:', error);
       throw error;
     }
   }
