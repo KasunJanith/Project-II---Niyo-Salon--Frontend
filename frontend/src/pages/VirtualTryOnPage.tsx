@@ -296,11 +296,23 @@ const VirtualTryOnPage = () => {
         const height = overlayImageRef.current.height * scale;
         const x = (previewCanvasRef.current.width - width) / 2;
         const y = previewCanvasRef.current.height * 0.08;
-        
-        ctx.globalAlpha = 0.85;
+          ctx.globalAlpha = 0.85;
         ctx.drawImage(overlayImageRef.current, x, y, width, height);
       }
-    }    // Continue the animation loop only if still active
+    } else {
+      console.log('⚠️ Overlay image not loaded yet, waiting...', {
+        hasImage: !!overlayImageRef.current,
+        isComplete: overlayImageRef.current?.complete,
+        selectedStyle: selectedStyle?.name
+      });
+      
+      // Show waiting indicator
+      ctx.fillStyle = 'rgba(128, 128, 128, 0.5)';
+      ctx.fillRect(10, 70, 120, 30);
+      ctx.fillStyle = '#808080';
+      ctx.font = '14px Arial';
+      ctx.fillText('LOADING OVERLAY...', 15, 90);
+    }// Continue the animation loop only if still active
     if (isAnimationActiveRef.current) {
       animationFrameRef.current = requestAnimationFrame(drawHairstyleOverlay);
     } else {
@@ -425,6 +437,17 @@ const VirtualTryOnPage = () => {
       console.log('🛑 Animation stopped');
     }
   }, [cameraOn, videoPlaying, selectedStyle?.id]); // Use stable selectedStyle.id instead of entire object
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      isAnimationActiveRef.current = false;
+    };
+  }, []);
 
   const analyzeSkinTone = (faceImage) => {
     try {
