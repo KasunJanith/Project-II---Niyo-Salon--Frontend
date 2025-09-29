@@ -1,18 +1,23 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { StarIcon, AwardIcon, UsersIcon, ClockIcon, ScissorsIcon, PaletteIcon, HeartIcon, TrendingUpIcon } from 'lucide-react';
 import heroImg from '../assets/Services/Hero.png';
 import salonImg from '../assets/Services/Salon-img01.jpg';
 import man1 from '../assets/Home/man1.png';
 import man2 from '../assets/Home/man2.png';
 import man3 from '../assets/Home/man3.png';
+import barber1 from '../assets/Home/barber1.jpg';
+import barber2 from '../assets/Home/barber2.jpg';
+import barber3 from '../assets/Home/barber3.jpg';
+
 
 function AboutUsPage() {
   const teamMembers = [
     {
       id: 1,
-      name: 'Jamie Rodriguez',
+      name: 'Susantha Niroshan',
       role: 'Master Hair Stylist & Founder',
-      image: man1,
+      image: barber1,
       experience: '15+ Years',
       specialization: 'Creative Cuts & Color',
       description: 'Jamie founded Niyo Salon with a vision to create a premium grooming experience that combines artistry with precision.',
@@ -20,9 +25,9 @@ function AboutUsPage() {
     },
     {
       id: 2,
-      name: 'Alex Kim',
+      name: 'Nalin Perera',
       role: 'Senior Barber & Grooming Expert',
-      image: man2,
+      image: barber2,
       experience: '12+ Years',
       specialization: 'Classic & Modern Cuts',
       description: 'Alex brings traditional barbering techniques combined with contemporary styling to deliver exceptional results.',
@@ -30,9 +35,9 @@ function AboutUsPage() {
     },
     {
       id: 3,
-      name: 'Taylor Morgan',
+      name: 'Kasun Fernando',
       role: 'Lead Tattoo Artist',
-      image: man3,
+      image: barber3,
       experience: '10+ Years',
       specialization: 'Custom Artwork & Design',
       description: 'Taylor creates stunning custom tattoos that tell your unique story through exceptional artistry and technique.',
@@ -115,12 +120,16 @@ function AboutUsPage() {
               </p>
               
               <div className="flex flex-col sm:flex-row gap-6 justify-center lg:justify-start">
-                <button className="bg-[#F7BF24] hover:bg-yellow-400 text-black px-8 py-4 rounded-full font-bold text-sm tracking-wide transition-all duration-300 transform hover:scale-105 shadow-lg">
-                  BOOK APPOINTMENT
-                </button>
-                <button className="bg-transparent border-2 border-[#F7BF24] text-[#F7BF24] hover:bg-[#F7BF24] hover:text-black px-8 py-4 rounded-full font-bold text-sm tracking-wide transition-all duration-300 transform hover:scale-105">
-                  VIEW GALLERY
-                </button>
+                <Link to="/appointments">
+                  <button className="bg-[#F7BF24] hover:bg-yellow-400 text-black px-8 py-4 rounded-full font-bold text-sm tracking-wide transition-all duration-300 transform hover:scale-105 shadow-lg">
+                    BOOK APPOINTMENT
+                  </button>
+                </Link>
+                <Link to="/gallery">
+                  <button className="bg-transparent border-2 border-[#F7BF24] text-[#F7BF24] hover:bg-[#F7BF24] hover:text-black px-8 py-4 rounded-full font-bold text-sm tracking-wide transition-all duration-300 transform hover:scale-105">
+                    VIEW GALLERY
+                  </button>
+                </Link>
               </div>
             </div>
 
@@ -394,12 +403,16 @@ function AboutUsPage() {
             Join thousands of satisfied clients who trust us with their style. Book your appointment today and experience the Niyo difference.
           </p>
           <div className="flex flex-col sm:flex-row gap-6 justify-center">
-            <button className="bg-[#F7BF24] hover:bg-yellow-400 text-black px-10 py-4 rounded-full font-bold text-lg tracking-wide transition-all duration-300 transform hover:scale-105 shadow-xl">
-              BOOK NOW
-            </button>
-            <button className="bg-transparent border-2 border-[#F7BF24] text-[#F7BF24] hover:bg-[#F7BF24] hover:text-black px-10 py-4 rounded-full font-bold text-lg tracking-wide transition-all duration-300 transform hover:scale-105">
-              CONTACT US
-            </button>
+            <Link to="/appointment">
+              <button className="bg-[#F7BF24] hover:bg-yellow-400 text-black px-10 py-4 rounded-full font-bold text-lg tracking-wide transition-all duration-300 transform hover:scale-105 shadow-xl">
+                BOOK NOW
+              </button>
+            </Link>
+            <Link to="/contact">
+              <button className="bg-transparent border-2 border-[#F7BF24] text-[#F7BF24] hover:bg-[#F7BF24] hover:text-black px-10 py-4 rounded-full font-bold text-lg tracking-wide transition-all duration-300 transform hover:scale-105">
+                CONTACT US
+              </button>
+            </Link>
           </div>
         </div>
       </section>
