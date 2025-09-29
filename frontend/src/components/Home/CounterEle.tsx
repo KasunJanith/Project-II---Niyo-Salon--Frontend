@@ -43,7 +43,7 @@ function CounterEle() {
 
   return (
     <div className="pb-16 py-20">
-      <div className="w-full bg-[#232323] py-16 border-y border-gray-400">
+      <div className="w-full bg-[#232323] py-16">
         <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8">
           {counters.map((item, idx) => (
             <div key={idx} className="flex flex-col items-center">

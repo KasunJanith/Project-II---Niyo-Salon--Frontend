@@ -296,7 +296,7 @@ const HomePage = () => {
       <CounterEle />
 
       {/* CLIENTS REVIEWS Section */}
-      <ClientReviews />
+      {/* <ClientReviews /> */}
 
       {/* Gallery Preview Section */}
       <section className="relative py-24 bg-gradient-to-br from-[#181818] via-[#232323] to-[#181818] overflow-hidden border-t border-gray-400">
