@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as faceapi from 'face-api.js';
 import * as tf from '@tensorflow/tfjs';
-import { SelfieSegmentation } from '@mediapipe/selfie_segmentation';
 
 const hairstyles = [
   {
@@ -105,74 +104,350 @@ const rgbToLab = (r, g, b) => {
   return { l, a, b: bLab };
 };
 
+interface HairstyleType {
+  id: number;
+  name: string;
+  image: string;
+  overlay: string;
+  category: string;
+  faceShapes: string[];
+  ageRange: number[];
+  difficulty: string;
+  tags: string[];
+}
+
 const VirtualTryOnPage = () => {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const previewCanvasRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [attributes, setAttributes] = useState({
     faceShape: 'Detecting...',
     age: 'Detecting...',
     skinTone: 'Detecting...'
   });
-  const [suggestedStyles, setSuggestedStyles] = useState([]);
-  const [selectedStyle, setSelectedStyle] = useState(null);
+  const [suggestedStyles, setSuggestedStyles] = useState<HairstyleType[]>([]);
+  const [selectedStyle, setSelectedStyle] = useState<HairstyleType | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [detectionDone, setDetectionDone] = useState(false);
   const [error, setError] = useState('');
   const [videoPlaying, setVideoPlaying] = useState(false);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [showHowItWorks, setShowHowItWorks] = useState(false);
-  const selfieSegmentation = useRef(null);
-  const overlayImageRef = useRef(null);
-  const faceLandmarksRef = useRef(null);
+  const [modelsLoaded, setModelsLoaded] = useState(false);  const [showHowItWorks, setShowHowItWorks] = useState(false);  const [generatingAI, setGeneratingAI] = useState(false);
+  const [aiGeneratedImage, setAiGeneratedImage] = useState<string | null>(null);
+  const overlayImageRef = useRef<HTMLImageElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);  // Enhanced hairstyle positioning with improved accuracy
+  const drawHairstyleOverlay = async () => {
+    // Check if animation should continue
+    if (!isAnimationActiveRef.current) {
+      console.log('🛑 Animation loop stopped by state check');
+      return;
+    }
 
-  const onSegmentationResults = (results) => {
-    if (!previewCanvasRef.current || !videoRef.current || !selectedStyle || !videoPlaying) return;
+    if (!previewCanvasRef.current || !videoRef.current || !selectedStyle || !videoPlaying) {
+      console.log('⚠️ Missing requirements for overlay, retrying...', {
+        canvas: !!previewCanvasRef.current,
+        video: !!videoRef.current,
+        style: !!selectedStyle,
+        playing: videoPlaying
+      });
+      
+      // Continue animation loop even if conditions aren't met temporarily
+      if (isAnimationActiveRef.current) {
+        animationFrameRef.current = requestAnimationFrame(drawHairstyleOverlay);
+      }
+      return;
+    }
 
     const ctx = previewCanvasRef.current.getContext('2d');
     if (!ctx) {
-      console.error('Canvas context not available');
+      console.log('⚠️ No canvas context, retrying...');
+      if (isAnimationActiveRef.current) {
+        animationFrameRef.current = requestAnimationFrame(drawHairstyleOverlay);
+      }
       return;
     }
+
+    // Clear canvas and draw video frame
     ctx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
-
-    // Draw the camera feed as background
     ctx.drawImage(videoRef.current, 0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+    
+    // Always show canvas activity indicator
+    ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+    ctx.fillRect(5, 5, 10, 10);
+    
+    // Add debugging info
+    console.log('🎨 Canvas update:', {
+      canvasSize: `${previewCanvasRef.current.width}x${previewCanvasRef.current.height}`,
+      videoSize: `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`,
+      overlayLoaded: overlayImageRef.current?.complete,
+      overlaySize: overlayImageRef.current ? `${overlayImageRef.current.width}x${overlayImageRef.current.height}` : 'none'
+    });
 
-    // Apply segmentation mask to isolate the person
-    ctx.globalCompositeOperation = 'source-in';
-    ctx.drawImage(results.segmentationMask, 0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+    // Draw hairstyle overlay if loaded
+    if (overlayImageRef.current && overlayImageRef.current.complete) {
+      try {
+        const detections = await faceapi.detectSingleFace(
+          videoRef.current,
+          new faceapi.TinyFaceDetectorOptions()
+        ).withFaceLandmarks();
 
-    // Reset composite operation for drawing the overlay
-    ctx.globalCompositeOperation = 'source-over';
-
-    // Draw the hairstyle overlay using facial landmarks if available
-    if (overlayImageRef.current && overlayImageRef.current.complete && faceLandmarksRef.current) {
-      const landmarks = faceLandmarksRef.current;
-      const nose = landmarks.getNose();
-      const leftEye = landmarks.getLeftEye();
-      const rightEye = landmarks.getRightEye();
-
-      console.log('Landmarks detected:', { nose, leftEye, rightEye });
-      if (!nose || !leftEye || !rightEye) {
-        console.warn('Incomplete facial landmarks');
-        return;
+        if (detections) {
+          const landmarks = detections.landmarks;
+          const positions = landmarks.positions;
+          
+          // Enhanced landmark selection for better positioning
+          const leftTemple = positions[0];     // Far left of face (jawline)
+          const rightTemple = positions[16];   // Far right of face (jawline)
+          const leftEye = positions[36];       // Left eye outer corner
+          const rightEye = positions[45];      // Right eye outer corner
+          const noseBridge = positions[27];    // Nose bridge
+          const topHead = positions[24];       // Top of head area
+          const chin = positions[8];           // Chin
+          
+          if (leftEye && rightEye && leftTemple && rightTemple && noseBridge && topHead) {
+            const canvasWidth = previewCanvasRef.current.width;
+            const canvasHeight = previewCanvasRef.current.height;
+            
+            // Calculate face dimensions with better accuracy
+            const faceWidth = Math.abs(rightTemple.x - leftTemple.x) * canvasWidth;
+            const eyeDistance = Math.abs(rightEye.x - leftEye.x) * canvasWidth;
+            const faceHeight = Math.abs(chin.y - topHead.y) * canvasHeight;
+            
+            // Calculate head center using eyes for better accuracy
+            const headCenterX = ((leftEye.x + rightEye.x) / 2) * canvasWidth;
+            const eyeLineY = ((leftEye.y + rightEye.y) / 2) * canvasHeight;
+            
+            // Estimate forehead position more accurately
+            const foreheadY = eyeLineY - (eyeDistance * 0.8); // Better ratio for forehead
+            
+            // Calculate hairstyle dimensions with improved proportions
+            const hairstyleBaseWidth = faceWidth * 1.4; // Better coverage
+            const aspectRatio = overlayImageRef.current.height / overlayImageRef.current.width;
+            let hairstyleHeight = hairstyleBaseWidth * aspectRatio;
+            
+            // Ensure minimum height for proper coverage
+            hairstyleHeight = Math.max(hairstyleHeight, eyeDistance * 1.6);
+            
+            // Position the hairstyle with better alignment
+            const hairstyleX = headCenterX - (hairstyleBaseWidth / 2);
+            const hairstyleY = foreheadY - (hairstyleHeight * 0.75); // Better top positioning
+            
+            // Apply head rotation for natural movement
+            const eyeAngle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+            
+            ctx.save();
+            
+            // Transform for rotation
+            ctx.translate(headCenterX, eyeLineY);
+            ctx.rotate(eyeAngle);
+            ctx.translate(-headCenterX, -eyeLineY);
+            
+            // Enhanced blending for more natural look
+            ctx.globalAlpha = 0.88;
+            ctx.globalCompositeOperation = 'source-over';
+              // Draw hairstyle with enhanced positioning
+            ctx.drawImage(
+              overlayImageRef.current, 
+              hairstyleX, 
+              hairstyleY, 
+              hairstyleBaseWidth, 
+              hairstyleHeight
+            );
+            
+            ctx.restore();
+            
+            // DEBUG: Add visible test rectangle to verify drawing is working
+            ctx.fillStyle = 'rgba(247, 191, 36, 0.3)';
+            ctx.fillRect(10, 10, 100, 50);
+            ctx.fillStyle = '#F7BF24';
+            ctx.font = '16px Arial';
+            ctx.fillText('OVERLAY ACTIVE', 15, 35);
+            
+            // Debug info (remove in production)
+            console.log('Enhanced positioning:', {
+              headCenter: { x: headCenterX, y: eyeLineY },
+              hairstylePos: { x: hairstyleX, y: hairstyleY },
+              dimensions: { width: hairstyleBaseWidth, height: hairstyleHeight },
+              rotation: eyeAngle * (180 / Math.PI) + '°'
+            });
+          }        } else {
+          // Improved fallback positioning
+          const scale = 0.8; // Slightly larger scale
+          const width = overlayImageRef.current.width * scale;
+          const height = overlayImageRef.current.height * scale;
+          const x = (previewCanvasRef.current.width - width) / 2;
+          const y = previewCanvasRef.current.height * 0.08; // Better top positioning
+          
+          ctx.globalAlpha = 0.85;
+          ctx.drawImage(overlayImageRef.current, x, y, width, height);
+          
+          // DEBUG: Add visible test rectangle
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+          ctx.fillRect(50, 50, 100, 30);
+          ctx.fillStyle = '#FF0000';
+          ctx.font = '14px Arial';
+          ctx.fillText('FALLBACK MODE', 55, 70);
+        }
+      } catch (error) {
+        console.error('Face detection for positioning failed:', error);
+        // Emergency fallback with better positioning
+        const scale = 0.8;
+        const width = overlayImageRef.current.width * scale;
+        const height = overlayImageRef.current.height * scale;
+        const x = (previewCanvasRef.current.width - width) / 2;
+        const y = previewCanvasRef.current.height * 0.08;
+          ctx.globalAlpha = 0.85;
+        ctx.drawImage(overlayImageRef.current, x, y, width, height);
       }
-
-      const headWidth = Math.abs(rightEye.x - leftEye.x) * previewCanvasRef.current.width;
-      const headHeight = headWidth * 1.2;
-      const x = (nose.x * previewCanvasRef.current.width) - (headWidth / 2);
-      const y = (nose.y * previewCanvasRef.current.height) - (headHeight / 2);
-
-      ctx.drawImage(overlayImageRef.current, x, y, headWidth, headHeight);
     } else {
-      console.warn('Overlay image or landmarks not ready:', {
-        overlayLoaded: overlayImageRef.current?.complete,
-        landmarksAvailable: !!faceLandmarksRef.current,
+      console.log('⚠️ Overlay image not loaded yet, waiting...', {
+        hasImage: !!overlayImageRef.current,
+        isComplete: overlayImageRef.current?.complete,
+        selectedStyle: selectedStyle?.name
       });
+      
+      // Show waiting indicator
+      ctx.fillStyle = 'rgba(128, 128, 128, 0.5)';
+      ctx.fillRect(10, 70, 120, 30);
+      ctx.fillStyle = '#808080';
+      ctx.font = '14px Arial';
+      ctx.fillText('LOADING OVERLAY...', 15, 90);
+    }// Continue the animation loop only if still active
+    if (isAnimationActiveRef.current) {
+      animationFrameRef.current = requestAnimationFrame(drawHairstyleOverlay);
+    } else {
+      console.log('🛑 Animation loop ended');
     }
   };
+  // Load overlay image when selected style changes
+  useEffect(() => {
+    if (selectedStyle) {
+      console.log('Loading overlay for:', selectedStyle.name);
+      console.log('Overlay URL:', selectedStyle.overlay);
+      console.log('Fallback URL:', selectedStyle.image);
+      
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      // Try overlay first, fallback to regular image
+      img.src = selectedStyle.overlay || selectedStyle.image;
+      
+      img.onload = () => {
+        console.log('✅ Overlay image loaded successfully!', {
+          src: img.src,
+          dimensions: `${img.width}x${img.height}`,
+          complete: img.complete
+        });
+        overlayImageRef.current = img;
+        
+        // Force a redraw if animation is running
+        if (animationFrameRef.current) {
+          console.log('🔄 Forcing preview update...');
+        }
+      };
+      
+      img.onerror = (err) => {
+        console.error('❌ Failed to load overlay image:', selectedStyle.overlay, err);
+        console.log('🔄 Trying fallback image:', selectedStyle.image);
+        
+        // Fallback to regular image
+        const fallbackImg = new Image();
+        fallbackImg.crossOrigin = 'anonymous';
+        fallbackImg.src = selectedStyle.image;
+        fallbackImg.onload = () => {
+          console.log('✅ Fallback image loaded successfully!', {
+            src: fallbackImg.src,
+            dimensions: `${fallbackImg.width}x${fallbackImg.height}`
+          });
+          overlayImageRef.current = fallbackImg;
+        };
+        fallbackImg.onerror = () => {
+          console.error('❌ Failed to load fallback image:', selectedStyle.image);
+          setError('Could not load hairstyle image. Please try another style.');
+        };
+      };
+    } else {
+      // Clear overlay when no style selected
+      overlayImageRef.current = null;
+      console.log('🧹 Cleared overlay image reference');
+    }
+  }, [selectedStyle]);  // Canvas test effect
+  useEffect(() => {
+    if (!previewCanvasRef.current) return;
+    
+    const canvas = previewCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Immediate canvas test
+    console.log('🧪 Testing canvas drawing...');
+    ctx.fillStyle = 'red';
+    ctx.fillRect(0, 0, 100, 100);
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.fillText('CANVAS TEST', 10, 30);
+    console.log('✅ Canvas test complete');
+  }, [selectedStyle]);
+  // Animation loop management with stable references
+  const isAnimationActiveRef = useRef(false);
+  
+  // Start animation when conditions are met
+  useEffect(() => {
+    const shouldAnimate = cameraOn && selectedStyle && videoPlaying;
+    
+    console.log('🎬 Animation state check:', { 
+      cameraOn, 
+      hasStyle: !!selectedStyle, 
+      videoPlaying, 
+      currentlyAnimating: isAnimationActiveRef.current,
+      shouldAnimate 
+    });
+
+    if (shouldAnimate && !isAnimationActiveRef.current) {
+      console.log('✅ Starting animation loop...');
+      
+      // Set canvas dimensions to match video
+      if (previewCanvasRef.current && videoRef.current) {
+        const videoWidth = videoRef.current.videoWidth || 640;
+        const videoHeight = videoRef.current.videoHeight || 480;
+        
+        previewCanvasRef.current.width = 640;
+        previewCanvasRef.current.height = 480;
+        
+        console.log('📐 Canvas dimensions set:', { 
+          canvasWidth: previewCanvasRef.current.width,
+          canvasHeight: previewCanvasRef.current.height,
+          videoWidth, 
+          videoHeight 
+        });
+      }
+      
+      isAnimationActiveRef.current = true;
+      animationFrameRef.current = requestAnimationFrame(drawHairstyleOverlay);
+      console.log('🚀 Animation frame requested');
+      
+    } else if (!shouldAnimate && isAnimationActiveRef.current) {
+      console.log('🛑 Stopping animation loop...');
+      
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      isAnimationActiveRef.current = false;
+      console.log('🛑 Animation stopped');
+    }
+  }, [cameraOn, videoPlaying, selectedStyle?.id]); // Use stable selectedStyle.id instead of entire object
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      isAnimationActiveRef.current = false;
+    };
+  }, []);
 
   const analyzeSkinTone = (faceImage) => {
     try {
@@ -249,7 +524,9 @@ const VirtualTryOnPage = () => {
     const loadModels = async () => {
       try {
         await tf.ready();
-        await tf.setBackend('webgl'); // Ensure WebGL backend is set
+        await tf.setBackend('webgl');
+        console.log('TensorFlow.js backend set to:', tf.getBackend());
+        
         const MODEL_URL = '/models';
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
@@ -262,93 +539,15 @@ const VirtualTryOnPage = () => {
         setError('Some features may not work properly. Please refresh the page.');
         setModelsLoaded(true);
       }
-
-      try {
-        selfieSegmentation.current = new SelfieSegmentation({
-          locateFile: (file) =>
-            `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
-        });
-
-        selfieSegmentation.current.setOptions({
-          modelSelection: 1,
-          selfieMode: true,
-          minDetectionConfidence: 0.5, // Lower confidence to avoid missing detections
-        });
-
-        selfieSegmentation.current.onResults(onSegmentationResults);
-      } catch (err) {
-        console.error('Failed to initialize selfie segmentation:', err);
-        setError('Segmentation initialization failed. Please check your browser settings.');
-      }
     };
 
     loadModels();
   }, []);
 
-  useEffect(() => {
-    if (cameraOn && selectedStyle && previewCanvasRef.current && videoPlaying) {
-      const overlayInterval = setInterval(async () => {
-        if (videoRef.current && selfieSegmentation.current) {
-          try {
-            const videoWidth = videoRef.current.videoWidth;
-            const videoHeight = videoRef.current.videoHeight;
-            if (videoWidth && videoHeight) {
-              previewCanvasRef.current.width = videoWidth;
-              previewCanvasRef.current.height = videoHeight;
-              // Debug WebGL context
-              const gl = document.createElement('canvas').getContext('webgl2');
-              console.log('WebGL2 supported:', !!gl);
-              await selfieSegmentation.current.send({ image: videoRef.current });
-              const detections = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
-              if (detections) {
-                faceLandmarksRef.current = detections.landmarks;
-                console.log('Face landmarks updated:', detections.landmarks);
-              } else {
-                console.warn('No face detected in current frame');
-              }
-            } else {
-              console.warn('Video dimensions not available yet');
-            }
-          } catch (err) {
-            console.error('Segmentation or landmark detection error:', err);
-            setError('Error processing video feed. Check console for details. Try restarting the camera.');
-          }
-        }
-      }, 100);
-
-      return () => clearInterval(overlayInterval);
-    }
-  }, [cameraOn, selectedStyle, videoPlaying]);
-
-  useEffect(() => {
-    if (selectedStyle) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = selectedStyle.overlay || selectedStyle.image;
-      img.onload = () => {
-        overlayImageRef.current = img;
-        console.log('Overlay image loaded:', selectedStyle.overlay);
-      };
-      img.onerror = () => {
-        console.error('Failed to load overlay image:', selectedStyle.overlay);
-        setError('Could not load hairstyle overlay. Check image paths or server configuration.');
-        const fallbackImg = new Image();
-        fallbackImg.src = selectedStyle.image;
-        fallbackImg.onload = () => {
-          overlayImageRef.current = fallbackImg;
-          console.log('Fallback image loaded:', selectedStyle.image);
-        };
-        fallbackImg.onerror = () => {
-          console.error('Failed to load fallback image:', selectedStyle.image);
-        };
-      };
-    }
-  }, [selectedStyle]);
-
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { width: 640, height: 480, frameRate: 30 }
       });
 
       if (videoRef.current) {
@@ -377,12 +576,21 @@ const VirtualTryOnPage = () => {
       console.error('Camera error:', err);
     }
   };
-
   const stopCamera = () => {
+    // Stop animation loop
+    isAnimationActiveRef.current = false;
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    // Stop camera stream
     if (videoRef.current?.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       videoRef.current.srcObject = null;
     }
+    
     setCameraOn(false);
     setVideoPlaying(false);
     setAnalyzing(false);
@@ -390,11 +598,19 @@ const VirtualTryOnPage = () => {
     setAttributes({ faceShape: 'Detecting...', age: 'Detecting...', skinTone: 'Detecting...' });
     setSuggestedStyles([]);
     setSelectedStyle(null);
+    
+    // Clear canvases
     if (previewCanvasRef.current) {
-      previewCanvasRef.current.getContext('2d').clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+      const ctx = previewCanvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+      }
     }
     if (canvasRef.current) {
-      canvasRef.current.getContext('2d').clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
     }
   };
 
@@ -482,12 +698,93 @@ const VirtualTryOnPage = () => {
         return shapeMatch && ageMatch;
       })
       .slice(0, 6);
-  };
-
-  const handleTryOn = (style) => {
+  };  const handleTryOn = (style: HairstyleType) => {
+    console.log('🎯 handleTryOn called:', style.name);
     setSelectedStyle(style);
+    
+    // Force immediate overlay test with better error handling
+    setTimeout(() => {
+      if (!previewCanvasRef.current) {
+        console.error('❌ Preview canvas not found!');
+        return;
+      }
+      
+      if (!videoRef.current) {
+        console.error('❌ Video element not found!');
+        return;
+      }
+      
+      const ctx = previewCanvasRef.current.getContext('2d');
+      if (!ctx) {
+        console.error('❌ Cannot get canvas context!');
+        return;
+      }
+      
+      // Test basic canvas drawing first
+      console.log('🧪 Testing basic canvas drawing...');
+      ctx.fillStyle = 'red';
+      ctx.fillRect(10, 10, 100, 50);
+      ctx.fillStyle = 'white';
+      ctx.font = '16px Arial';
+      ctx.fillText('TEST DRAW', 15, 35);
+      console.log('✅ Basic canvas test completed');
+      
+      // Clear and draw video frame
+      setTimeout(() => {
+        if (!previewCanvasRef.current || !videoRef.current) return;
+        
+        ctx.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+        
+        try {
+          ctx.drawImage(videoRef.current, 0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+          console.log('✅ Video frame drawn to canvas');
+          
+          // Test overlay if available
+          if (overlayImageRef.current && overlayImageRef.current.complete) {
+            console.log('🧪 Drawing overlay test...');
+            
+            // Draw overlay without face detection (simple center position)
+            const scale = 0.6;
+            const width = overlayImageRef.current.width * scale;
+            const height = overlayImageRef.current.height * scale;
+            const x = (previewCanvasRef.current.width - width) / 2;
+            const y = 30; // Top of head area
+            
+            ctx.save();
+            ctx.globalAlpha = 0.9;
+            ctx.drawImage(overlayImageRef.current, x, y, width, height);
+            ctx.restore();
+            
+            // Add visible confirmation
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+            ctx.fillRect(10, 60, 150, 30);
+            ctx.fillStyle = 'black';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('OVERLAY VISIBLE!', 15, 80);
+            
+            console.log('✅ Overlay test completed!', {
+              overlaySize: `${overlayImageRef.current.width}x${overlayImageRef.current.height}`,
+              drawnAt: { x, y, width, height }
+            });
+          } else {
+            console.log('⏳ Overlay image not ready yet');
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.8)';
+            ctx.fillRect(10, 60, 150, 30);
+            ctx.fillStyle = 'black';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('LOADING OVERLAY...', 15, 80);
+          }
+        } catch (error) {
+          console.error('❌ Error during canvas drawing:', error);
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+          ctx.fillRect(10, 100, 150, 30);
+          ctx.fillStyle = 'white';
+          ctx.font = 'bold 14px Arial';
+          ctx.fillText('DRAW ERROR!', 15, 120);
+        }
+      }, 200);
+    }, 100);
   };
-
   const downloadSnap = () => {
     if (previewCanvasRef.current) {
       const dataURL = previewCanvasRef.current.toDataURL('image/png');
@@ -499,6 +796,73 @@ const VirtualTryOnPage = () => {
       document.body.removeChild(link);
     } else {
       alert('No image to download. Please select a hairstyle and ensure camera is on.');
+    }
+  };
+
+  // AI Photo Generation function (using free Hugging Face API)
+  const generateAIPhoto = async () => {
+    if (!videoRef.current || !selectedStyle) {
+      alert('Please select a hairstyle and ensure camera is on.');
+      return;
+    }
+
+    setGeneratingAI(true);
+    setAiGeneratedImage(null);
+
+    try {
+      // Capture current frame from video
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth || 640;
+      canvas.height = videoRef.current.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      
+      // Convert to blob for API
+      canvas.toBlob(async (blob) => {
+        const formData = new FormData();
+        formData.append('image', blob, 'face.jpg');
+        formData.append('prompt', `professional ${selectedStyle.name.toLowerCase()} hairstyle, ${attributes.skinTone.toLowerCase()} skin, ${attributes.faceShape.toLowerCase()} face, salon quality, natural lighting, high detail`);
+        formData.append('negative_prompt', 'blurry, low quality, distorted face, multiple faces, cartoon');
+        
+        try {
+          // Using Hugging Face Inference API (free tier available)
+          const response = await fetch('https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer YOUR_HUGGING_FACE_TOKEN', // You'll need to get this free token
+            },
+            body: formData
+          });
+          
+          if (response.ok) {
+            const imageBlob = await response.blob();
+            const imageUrl = URL.createObjectURL(imageBlob);
+            setAiGeneratedImage(imageUrl);
+          } else {
+            throw new Error('AI generation failed');
+          }
+        } catch (error) {
+          console.error('AI generation error:', error);
+          alert('AI generation failed. This feature requires API setup. Using enhanced overlay instead.');
+        }
+      }, 'image/jpeg', 0.8);
+      
+    } catch (error) {
+      console.error('Error preparing image for AI generation:', error);
+      alert('Failed to prepare image for AI generation.');
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
+
+  const downloadAIImage = () => {
+    if (aiGeneratedImage) {
+      const link = document.createElement('a');
+      link.href = aiGeneratedImage;
+      link.download = `ai_hairstyle_${selectedStyle?.name}_${new Date().getTime()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -750,26 +1114,83 @@ const VirtualTryOnPage = () => {
                 </div>
               )}
             </>
-          )}
-
-          {selectedStyle && (
+          )}          {selectedStyle && (
             <div className="mt-12 p-6 bg-[#232323] rounded-xl border border-gray-600">
               <h3 className="text-2xl font-bold text-white mb-6 text-center">Live Preview - {selectedStyle.name}</h3>
-              <div className="flex flex-col items-center">
-                <canvas
+              <div className="flex flex-col items-center">                <canvas
                   ref={previewCanvasRef}
-                  className="w-full h-auto border border-gray-600 rounded-xl shadow-lg mb-6"
-                  style={{ maxWidth: '640px', maxHeight: '480px' }}
+                  width={640}
+                  height={480}
+                  className="border border-gray-600 rounded-xl shadow-lg mb-6"
+                  style={{ 
+                    width: '100%', 
+                    maxWidth: '640px', 
+                    height: 'auto',
+                    display: 'block',
+                    imageRendering: 'auto',
+                    backgroundColor: '#000',
+                    zIndex: 10,
+                    position: 'relative'
+                  }}
                 />
-                <button
-                  onClick={downloadSnap}
-                  className="px-8 py-3 rounded-full font-inter text-base font-semibold tracking-wide transition-all duration-300 bg-gradient-to-r from-[#F7BF24] to-[#F9D371] text-black hover:shadow-lg hover:shadow-[#F7BF24]/30 flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                  Download Your Look
-                </button>
+                <div className="text-sm text-gray-400 mb-4 text-center">
+                  {!overlayImageRef.current?.complete ? 'Loading hairstyle overlay...' : 'Real-time preview active - Move your head to see the hairstyle follow!'}
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
+                  <button
+                    onClick={downloadSnap}
+                    className="px-6 py-3 rounded-full font-inter text-sm font-semibold tracking-wide transition-all duration-300 bg-gradient-to-r from-[#F7BF24] to-[#F9D371] text-black hover:shadow-lg hover:shadow-[#F7BF24]/30 flex items-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                    Download Preview
+                  </button>
+                  
+                  <button
+                    onClick={generateAIPhoto}
+                    disabled={generatingAI}
+                    className="px-6 py-3 rounded-full font-inter text-sm font-semibold tracking-wide transition-all duration-300 border-2 border-[#F7BF24] text-[#F7BF24] hover:bg-[#F7BF24] hover:text-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {generatingAI ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                        Generating AI Photo...
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                        </svg>
+                        Generate AI Photo
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {aiGeneratedImage && (
+                  <div className="mt-8 p-4 bg-[#2a2a2a] rounded-xl border border-[#F7BF24]/30">
+                    <h4 className="text-[#F7BF24] font-semibold mb-4 text-center">AI Generated Result</h4>
+                    <div className="flex flex-col items-center">
+                      <img 
+                        src={aiGeneratedImage} 
+                        alt="AI Generated Hairstyle" 
+                        className="max-w-full h-auto rounded-lg border border-gray-600 mb-4"
+                        style={{ maxHeight: '400px' }}
+                      />
+                      <button
+                        onClick={downloadAIImage}
+                        className="px-6 py-2 rounded-full font-inter text-sm font-semibold tracking-wide transition-all duration-300 bg-gradient-to-r from-green-500 to-green-600 text-white hover:shadow-lg flex items-center gap-2"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        Download AI Photo
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
