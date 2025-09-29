@@ -375,7 +375,8 @@ const VirtualTryOnPage = () => {
     ctx.font = '20px Arial';
     ctx.fillText('CANVAS TEST', 10, 30);
     console.log('✅ Canvas test complete');
-  }, [selectedStyle]);  // Animation loop management with stable references
+  }, [selectedStyle]);
+  // Animation loop management with stable references
   const isAnimationActiveRef = useRef(false);
   
   // Start animation when conditions are met
@@ -410,13 +411,8 @@ const VirtualTryOnPage = () => {
       }
       
       isAnimationActiveRef.current = true;
-      // Delay the first frame to ensure overlay is loaded
-      setTimeout(() => {
-        if (isAnimationActiveRef.current) {
-          animationFrameRef.current = requestAnimationFrame(drawHairstyleOverlay);
-          console.log('🚀 Animation frame requested with delay');
-        }
-      }, 100);
+      animationFrameRef.current = requestAnimationFrame(drawHairstyleOverlay);
+      console.log('🚀 Animation frame requested');
       
     } else if (!shouldAnimate && isAnimationActiveRef.current) {
       console.log('🛑 Stopping animation loop...');
@@ -428,14 +424,6 @@ const VirtualTryOnPage = () => {
       isAnimationActiveRef.current = false;
       console.log('🛑 Animation stopped');
     }
-    
-    // Cleanup function to prevent memory leaks
-    return () => {
-      if (!shouldAnimate && animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-    };
   }, [cameraOn, videoPlaying, selectedStyle?.id]); // Use stable selectedStyle.id instead of entire object
 
   const analyzeSkinTone = (faceImage) => {
