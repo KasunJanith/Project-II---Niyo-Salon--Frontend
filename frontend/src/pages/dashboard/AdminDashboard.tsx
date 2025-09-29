@@ -7,18 +7,13 @@ import {
   SearchIcon,
   MenuIcon,
   XIcon,
-  SettingsIcon,
-  ClockIcon,
-  CheckCircleIcon,
-  AlertCircleIcon,
   Users2Icon,
   CalendarDaysIcon,
   FilterIcon,
   PlusIcon,
   EditIcon,
   EyeIcon,  
-  Trash2Icon,
-  MoreVerticalIcon
+  Trash2Icon
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
@@ -140,7 +135,7 @@ const AdminDashboard = () => {
 
       if (response.ok) {
         const usersFromApi = await response.json();
-        const customerUsers = usersFromApi.filter((user: any) => user.role === 'customer');
+        const customerUsers = usersFromApi.filter((user: { role: string }) => user.role === 'customer');
         setCustomersData(customerUsers);
       }
     } catch (error) {
@@ -201,44 +196,10 @@ const AdminDashboard = () => {
     { icon: Users2Icon, label: 'Staff', count: staffData.length, path: '/dashboard/adminstaff' },
     { icon: CalendarIcon, label: 'Appointments', count: 0, path: '/dashboard/appointments' }, // Connect to appointments API
     { icon: ScissorsIcon, label: 'Services', count: servicesData.length, path: '/dashboard/services' },
-    { icon: BellIcon, label: 'Notifications', count: 5, path: '/dashboard/notifications' },
-    { icon: PlusIcon, label: 'Gallery Upload', path: '/dashboard/admin/gallery-upload' },
-    { icon: SettingsIcon, label: 'Settings', path: '/dashboard/settings' }
+    { icon: PlusIcon, label: 'Gallery Upload', path: '/dashboard/admin/gallery-upload' }
   ];
 
-  // Mock appointments data (replace with real API when available)
-  const recentAppointments = [
-    {
-      id: 1,
-      customer: 'Sarah Johnson',
-      service: 'Premium Haircut',
-      staff: 'Jamie Rodriguez',
-      date: '2025-06-26',
-      time: '10:00 AM',
-      status: 'confirmed',
-      duration: '60 min'
-    },
-    {
-      id: 2,
-      customer: 'Michael Chen',
-      service: 'Beard Styling',
-      staff: 'Alex Kim',
-      date: '2025-06-26',
-      time: '11:30 AM',
-      status: 'in-progress',
-      duration: '45 min'
-    },
-    {
-      id: 3,
-      customer: 'Jessica Williams',
-      service: 'Hair Coloring',
-      staff: 'Jordan Smith',
-      date: '2025-06-26',
-      time: '2:00 PM',
-      status: 'pending',
-      duration: '120 min'
-    }
-  ];
+
 
   // Real staff status based on loaded data
   const getStaffStatusForDashboard = () => {
@@ -313,15 +274,7 @@ const AdminDashboard = () => {
     return notifications.slice(0, 3);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'confirmed': return 'bg-green-500';
-      case 'pending': return 'bg-yellow-500';
-      case 'in-progress': return 'bg-blue-500';
-      case 'cancelled': return 'bg-red-500';
-      default: return 'bg-gray-500';
-    }
-  };
+
 
   const getStaffStatusColor = (status: string) => {
     switch (status) {
@@ -673,12 +626,6 @@ const AdminDashboard = () => {
               <div className="p-6 border-b border-gray-700">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold text-white">Recent Notifications</h2>
-                  <button 
-                    onClick={() => navigate('/dashboard/notifications')}
-                    className="text-[#F7BF24] hover:text-yellow-400 text-sm font-medium"
-                  >
-                    View All
-                  </button>
                 </div>
               </div>
               <div className="p-6">
