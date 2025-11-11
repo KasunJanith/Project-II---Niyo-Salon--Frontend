@@ -469,7 +469,7 @@ const AppointmentPage = () => {
       {/* Header */}
       <div className="bg-[#181818] border-b border-gray-700 px-6 py-7">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold text-white font-abril mb-2">Book Your Appointment</h1>
+          <h1 className="text-3xl font-bold text-white font-inter mb-2">Book Your Appointment</h1>
           <p className="text-gray-400 text-lg">Choose your preferred services, date, and time for the perfect salon experience</p>
         </div>
       </div>
